@@ -1,2 +1,2 @@
-# R-agent-based-model
-Agent-based model implementation using R
+# R-ABMs
+Agent-based models implementation using R
