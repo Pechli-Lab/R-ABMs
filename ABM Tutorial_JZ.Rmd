@@ -37,8 +37,15 @@ p_load_gh("DARTH-git/darthtools")
 # 02 Load functions
 
 ```{r}
-# No functions needed
+#negate function
+`%!in%`                      <- Negate(`%in%`)
 ```
+
+
+In this basic ABM we assume that individuals can be be in one of 5 states:  1. susceptible to an infection, 2.infected and infectious but not in quarantine, 3.infected in quarantine, 4. recovered. Recovery is assumed to be a saturating state. We assumed that the quarantine period is 14 days from infection for all infected individuals. We further assumed that for the first day of the disease individuals are infectious although asymptomatic, and that as soon as there are symptoms individuals will self-quarantine. We further assumed perfect adherence to quarantine protocols. 
+We developed a agent based model where we assumed a daily cycle length. We modelled a hypothetical environment where indiciduals will go to work and can be infected at work and in the community but cannot infect others at home. We used the model to prospectively estimate a 60 day period. We assumed a latency of 4 days from acquiring the infection until symptom development 
+
+
 
 # 03 Model input
 
@@ -49,18 +56,11 @@ p_load_gh("DARTH-git/darthtools")
 set.seed(1)                                      # set the seed 
 n_cycles        <- 100                           # number of cycles
 n_i             <- 10000                         # number of individuals
+q_maxtime                   <- 14                # quarantine period
+latentperiod                <- 4                 # incubation period: time from receiving virus to being infectious
+detect_time                 <- 9                 # detect period: time from receiving virus to be detected, 5 days after being infectious
+recover_days                <- 14                # days to recover from being infected
 
-# quarantine period
-q_maxtime                   <- 14
-
-# incubation period
-latentperiod                <- 4 # time from receiving virus to being infectious
-
-# detect period
-detect_time                 <- 9 # time from receiving virus to be detected, 5 days after being infectious
-
-# days to recover from being infected
-recover_days                <- 14
 
 # the 5 health states of the model:
 v_names_states  <- c("S",   # Susceptble 
@@ -72,9 +72,6 @@ v_names_states  <- c("S",   # Susceptble
 v_names_cycles  <- paste("cycle", 0:n_cycles)    # cycle names
 n_states        <- length(v_names_states)        # number of health states 
 
-
-#not in
-`%!in%`                      <- Negate(`%in%`)
 
 
 #define groups of states
@@ -92,7 +89,9 @@ iso_states                   <- c("IR","IQ")
 sus_states                   <- c("S","SQ")
 
 
+```
 
+```{r}
 #### Deterministic analysis ####
 
 #Transition probabilities
@@ -100,7 +99,7 @@ sus_states                   <- c("S","SQ")
 #infection probabilities vary by location
 # community
 
-p_TransmitCommunity   <- 0.07683164968542 #household aldult
+p_TransmitCommunity   <- 0.07683164968542 #source: household adult transmission probability
 
 # atwork \ university
 p_TransmitWork        <- 0.0220595686685414
@@ -112,6 +111,7 @@ p_TransmitWork        <- 0.0220595686685414
 ## 04.1 Static characteristics
 
 ```{r}
+#initialize population dataframe
 create_abmpop <- function(npop, seed_ratio) {
   # Initialize a population dataframe for an agent-based model
   
@@ -172,14 +172,14 @@ create_abmpop <- function(npop, seed_ratio) {
   # Initialize other agent attributes
   agents <- agents %>%
     mutate(
-      expl = 0,  # Exposure level
-      contact_num = 0,  # Number of contacts in a day
-      contact_max = 0,  # Maximum number of contacts
-      contact_type = 0,  # Contact type
-      atwork = 1,  # Indicates if the agent is at work
-      v_Ts = 0,  # Time since being infected
+      expl = 0,           # Exposure level
+      contact_num = 0,    # Number of contacts in a day
+      contact_max = 0,    # Maximum number of contacts
+      contact_type = 0,   # Contact type
+      atwork = 1,         # Indicates if the agent is at work
+      v_Ts = 0,           # Time since being infected
       detect_time = detect_time,
-      new_detection = 0
+      new_detection = 0.  #variable record number of new detection
     )
 
   # Set the number of contacts at work based on workplace size
