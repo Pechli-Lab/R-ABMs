@@ -58,7 +58,7 @@ n_cycles        <- 100                           # number of cycles
 n_i             <- 10000                         # number of individuals
 q_maxtime                   <- 14                # quarantine period
 latentperiod                <- 4                 # incubation period: time from receiving virus to being infectious
-detect_time                 <- 9                 # detect period: time from receiving virus to be detected, 5 days after being infectious
+detect_time                 <- 9                 # # becoming infetious to isolation d
 recover_days                <- 14                # days to recover from being infected
 
 
@@ -76,7 +76,7 @@ n_states        <- length(v_names_states)        # number of health states
 
 #define groups of states
 
-ending_states                <- c("R")
+ending_states                <- c("R") 
 
 infect_states                <- c("I","IQ")
 
@@ -84,25 +84,26 @@ infect_states_iso            <- c("IQ")
 
 all_infect_states            <- c(infect_states,infect_states_iso)
 
-iso_states                   <- c("IR","IQ")
+iso_states                   <- c("SQ","IQ")
 
 sus_states                   <- c("S","SQ")
 
 
-```
-
-```{r}
-#### Deterministic analysis ####
 
 #Transition probabilities
 
 #infection probabilities vary by location
 # community
 
-p_TransmitCommunity   <- 0.07683164968542 #source: household adult transmission probability
+p_TransmitCommunity   <- 0.08 #daily community transmission probability 
 
 # atwork \ university
-p_TransmitWork        <- 0.0220595686685414
+p_TransmitWork        <- 0.02 # atwork transmission probability per interaction
+
+# Determine the initial number of 'S' (susceptible) and 'I' (infected) agents based on seed_ratio
+seed_ratio <- 0.3
+n_S <- round((1 - seed_ratio) * npop)
+n_I <- npop - n_S
 ```
 
 
@@ -111,116 +112,60 @@ p_TransmitWork        <- 0.0220595686685414
 ## 04.1 Static characteristics
 
 ```{r}
-#initialize population dataframe
-create_abmpop <- function(npop, seed_ratio) {
-  # Initialize a population dataframe for an agent-based model
-  
-  # Arguments:
-  # npop: number of people in the population
-  # seed_ratio: proportion of people infected at the beginning of the simulation
-  
-  # Returns:
-  # A dataframe representing the initialized population
-  
-  # Create agent matrix
-  agents <- data.frame(
-    ptid = 1:npop,  # Assign individual IDs
-    Sex = sample(x = c("Female", "Male"), prob = c(0.5, 0.5), size = npop, replace = TRUE),  # Random gender assignment
-    Age = round(rnorm(npop, mean=19, sd=15), digits = 0),  # Age drawn from a normal distribution
-    wid = 0,  # Workplace ID
-    fid = 0,  # Family ID
-    qtime = 0,  # Quarantine time clock
-    time = 0,   # Total quarantine time
-    state = "S" # Initial state of everyone is healthy ("S")
+# Initialize a population dataframe for an agent-based model
+
+# Create agent matrix
+df_X <- data.frame(
+  ptid = 1:npop,  # Assign individual IDs
+  Sex = sample(x = c("Female", "Male"), prob = c(0.5, 0.5), size = npop, replace = TRUE),  # Random gender assignment
+  Age = round(rnorm(npop, mean=40, sd=10), digits = 0),  # Age drawn from a normal distribution
+  wid = 0,  # Workplace ID
+  qtime = 0,  # Quarantine time clock
+  time = 0   # Total quarantine time
+)
+
+
+# Randomly assign initial states to agents
+df_X$state <- sample(c(rep("S", n_S), rep("I", n_I)))
+
+# Ensure Age variable has only positive values
+df_X$Age[df_X$Age < 19] <- 19 # only adults
+
+# Define workplace structure and IDs
+work_size <- c(5, 6, 7)
+p_work_size <- work_size / sum(work_size)
+work_num <- floor(npop * p_work_size / work_size)[1]
+work_id <- c(
+  rep(1:work_num, each = work_size[1]),
+  rep((work_num + 1):(work_num*2), each = work_size[2]),
+  rep((work_num*2 + 1):(work_num*3), each = work_size[3])
+)
+work_id <- sample(c(work_id, rep((max(work_id) + 1), each = (npop - length(work_id)))))
+df_X$wid <- work_id
+
+# Initialize other agent attributes
+df_X <- df_X %>%
+  mutate(
+    expl = 0,              # Exposure level
+    contact_num = 0,       # Number of contacts in a day
+    atwork = TRUE,         # Indicates if the agent is at work # at quarantine people can't go to work
+    v_Ts = 0,              # Time since being infected
+    detect_time = detect_time, 
   )
 
-  # Determine the initial number of 'S' (susceptible) and 'I' (infected) agents based on seed_ratio
-  n_S <- round((1 - seed_ratio) * npop)
-  n_I <- npop - n_S
-  
-  # Randomly assign initial states to agents
-  agents$state <- sample(c(rep("S", n_S), rep("I", n_I)))
+# Set the number of contacts at work based on workplace size
+work_in_sample <- df_X$ptid[which(df_X$atwork == TRUE)]  # check at quarantine and at work 
+work_size <- table(df_X[work_in_sample, ]$wid)
+work_info <- data.frame(wid = as.numeric(as.character(names(work_size))), wsize = as.numeric(as.matrix(work_size)))
+work_place_size <- merge(df_X[work_in_sample, ], work_info, by = "wid") %>%
+  arrange(ptid) %>%
+  rowwise() %>%
+  mutate(contact_num = sample(0:(wsize - 1), 1))  # Randomly assign contact number
 
-  # Ensure Age variable has only positive values
-  agents$Age <- agents$Age + abs(min(agents$Age))
-
-  # Define family structure and IDs
-  family_size <- c(1, 2, 3, 4)
-  p_family_size <- family_size / sum(family_size)
-  fam_num <- floor(npop * p_family_size / family_size)[1]
-  fam_id <- c(
-    rep(1:fam_num, each = family_size[1]),
-    rep((fam_num + 1):(fam_num*2), each = family_size[2]),
-    rep((fam_num*2 + 1):(fam_num*3), each = family_size[3]),
-    rep((fam_num*3 + 1):(fam_num*4), each = family_size[4])
-  )
-  fam_id <- c(fam_id, rep((max(fam_id) + 1), each = (npop - length(fam_id))))
-  agents$fid <- fam_id
-
-  # Define workplace structure and IDs
-  work_size <- c(5, 7, 8)
-  p_work_size <- work_size / sum(work_size)
-  work_num <- floor(npop * p_work_size / work_size)[1]
-  work_id <- c(
-    rep(1:work_num, each = work_size[1]),
-    rep((work_num + 1):(work_num*2), each = work_size[2]),
-    rep((work_num*2 + 1):(work_num*3), each = work_size[3])
-  )
-  work_id <- sample(c(work_id, rep((max(work_id) + 1), each = (npop - length(work_id)))))
-  agents$wid <- work_id
-
-  # Initialize other agent attributes
-  agents <- agents %>%
-    mutate(
-      expl = 0,           # Exposure level
-      contact_num = 0,    # Number of contacts in a day
-      contact_max = 0,    # Maximum number of contacts
-      contact_type = 0,   # Contact type
-      atwork = 1,         # Indicates if the agent is at work
-      v_Ts = 0,           # Time since being infected
-      detect_time = detect_time,
-      new_detection = 0.  #variable record number of new detection
-    )
-
-  # Set the number of contacts at work based on workplace size
-  work_in_sample <- agents$ptid[which(agents$atwork == TRUE)]
-  work_size <- table(agents[work_in_sample, ]$wid)
-  work_info <- data.frame(wid = as.numeric(as.character(names(work_size))), wsize = as.numeric(as.matrix(work_size)))
-  work_place_size <- merge(agents[work_in_sample, ], work_info, by = "wid") %>%
-    arrange(ptid) %>%
-    rowwise() %>%
-    mutate(contact_num = sample(0:(wsize - 1), 1))  # Randomly assign contact number
-
-  agents$contact_num[work_in_sample] <- work_place_size$contact_num
-  agents$contact_max[work_in_sample] <- work_place_size$wsize - 1
-
-  return(agents)
-}
-
+df_X$contact_num[work_in_sample] <- work_place_size$contact_num
 
 ```
 
-## 04.2 Dynamic characteristics
-
-```{r}
-# Specify the initial health state of the individuals 
-# everyone begins in the healthy state (in this example)
-v_M_init  <- rep("S", times = n_i)   
-v_n_cycles_s_init <- rep(0, n_i)  # a vector with the time of being sick at the start of the model 
-```
-
-## 04.3 Create a dataframe with the individual characteristics
-
-```{r}
-# create a data frame with each individual's 
-# ID number, treatment effect modifier, age and initial time in sick state 
-
-# NOTE: we use n_cycles_s for the number of times being sick, we start the data frame with the initial "history" of time being sick by saving v_Ts_init. However, during the simulation this value is updated and therefore called numer of times being sick.
-#head(df_X) # print the first rows of the dataframe
-
-df_X <- create_abmpop(n_i,0.1)
-
-```
 
 # 05 Define Simulation Functions
 
@@ -229,7 +174,7 @@ df_X <- create_abmpop(n_i,0.1)
 The `Probs` function updates the transition probabilities of every cycle is shown below.
 
 ```{r}
-
+# Calculate the infection probability by every cycle
 infect_prob <- function(prob,exposure) { 
   # Arguments:
   # prob:     the probability of infection in one time contact
@@ -239,6 +184,7 @@ infect_prob <- function(prob,exposure) {
   return(1 - (1 - prob) ^ (exposure))   # 1 - prob is the prob of being safe, 
   # 1 minus the prob of always being safe is the prob of getting infection
 }
+
 
 Probs <- function(M_t, df_X, v_Ts) { 
   # Arguments:
@@ -326,7 +272,7 @@ Probs <- function(M_t, df_X, v_Ts) {
 
 ```
 
-## 05.1 Quanrantine Function
+## 05.2 Quanrantine Function
 
 ```{r}
 
@@ -338,42 +284,48 @@ Quarantine_Check <- function(pop, pre_state){
   # Returns: 
   # new population dataframe with updated states
   
+  # -------------------------------------
   # Step1: find people in different quarantine conditions
+  # -------------------------------------
   
   # People in quarantine:
+  
   # condition 1: reset quarantine clock for those who become infected or have close contact with infected people during quarantine
   new_infected_in_Q          = which(pop$state %in% infect_states_iso & pre_state == "SQ") #got infected in quarantine
   
-  reset_family               = unique(pop$fid[new_infected_in_Q])
-  reset_people               = pop$fid %in% reset_family #find all the people who had expose in family quarantine
+  reset_workplace            = unique(pop$wid[new_infected_in_Q])
+  reset_people               = pop$wid %in% reset_workplace #find all the people who had expose in workplace quarantine
   
   
   # condition 2: find people are going to be released from quarantine
   # check if quarantine clock hit q_maxtime
-  full_q                     = pop$qtime == q_maxtime & !reset_people & pop$state %!in% ending_states 
+  full_q                     = pop$qtime == q_maxtime & !reset_people & pop$state != "R" 
   
   #find susceptible people and infected people who meet quarantine time
   sus_full_q                 = full_q & pop$state == "SQ"
   inf_full_q                 = full_q & pop$state %in% infect_states_iso 
   
   # condition 3: find people who stay in quarantine and the quarantine clock has to be incremented.
-  else_q                     = (pop$qtime < q_maxtime & pop$qtime >0) & !reset_people & pop$state %!in% ending_states  
+  else_q                     = (pop$qtime < q_maxtime & pop$qtime >0) & !reset_people & pop$state != "R"  
   
   # Other people:
   # condition 4: find newly infected people entering quarantine NOTE: people enter quarantine by detection
   new_infected               = which(pop$state %in% iso_states & pop$qtime == 0) #new infected generated from infected
   
   # condition q_maxtime: find newly infected people's dependencies in families and workpalces
-  new_infected_family        = unique(pop$fid[new_infected]) #families have newly infected in quarantine cases
+  new_infected_workplace        = unique(pop$wid[new_infected]) #families have newly infected in quarantine cases
   
   #new_infected_work= unique(pop$wid[new_infected]) #workplaces have newly infected in quarantine cases #comment out if same workplace contact don't need to be put in quarantine
   
-  new_qurantine              = (((pop$fid %in% new_infected_family & pop$qtime == 0) | #(pop$wid %in% new_infected_work & pop$qtime == 0) |
-                                   (pop$fid %in% reset_family)) & (pop$state %!in% ending_states) & (!(pop$essential == 1 & pop$getspsl == 0))  ) #people whose quarantine clocks have to be set to 1 including
+  new_qurantine              = (((pop$wid %in% new_infected_workplace & pop$qtime == 0) | #(pop$wid %in% new_infected_work & pop$qtime == 0) |
+                                   (pop$wid %in% reset_workplace)) & (pop$state != "R") & (!(pop$essential == 1 & pop$getspsl == 0))  ) #people whose quarantine clocks have to be set to 1 including
   new_qurantine_add = new_qurantine & pop$state %!in% iso_states #find people need to be put in quarantine state
   
   
+  # -------------------------------------
   # Step2: Update quarantine clock
+  # -------------------------------------
+  
   # set new_quarantine clock to 1 
   pop$qtime[new_qurantine]    = 1
   pop$state[new_qurantine_add] = paste(pop$state[new_qurantine_add],"Q",sep = "") #update quarantine states
@@ -383,7 +335,7 @@ Quarantine_Check <- function(pop, pre_state){
   # release people with meet q_maxtime-days quarantine requirement
   # - isolated susceptible people will go to susceptible
   # - infected people will go to recovered
-  pop$qtime[full_q]           = 0
+  pop$qtime[full_q]           =  0
   pop$state[sus_full_q]       = "S" #when quarantine ends, state goes back to susceptible
   pop$state[inf_full_q]       = "R" #when quarantine ends, state goes back to recovered
   
@@ -395,14 +347,24 @@ Quarantine_Check <- function(pop, pre_state){
 
 ```
 
-## 0.5.1 Exposure at work
+## 05.3 Exposure at work
 
 ```{r}
 
 # Exposure_Check calculates the exposure of workers at their workplace
 work_exposure <- function(pop) {
   
+  # Arguments:
+  # pop: A data frame representing the entire population. It should contain columns such as 'atwork', 'expl', 
+  #      'state', 'wid', 'ptid', and others that are relevant to the exposure at work.
+  # Returns:
+  # A modified version of the 'pop' data frame with updated exposure levels ('expl') and possibly other columns 
+  # based on interactions at the workplace.
+
+  
+  # -------------------------------------
   # Step1: Initialize and filter worker population
+  # -------------------------------------
   allpop <- pop                                                                 # Extract entire population data
   worker_list <- pop[pop$atwork == 1,]                                          # Filter workers currently at work
   
@@ -415,7 +377,9 @@ work_exposure <- function(pop) {
     out_of_iso <- select_pop$state %!in% iso_states                             # Workers out of isolation
     ptid_list <- select_pop$ptid[out_of_iso & select_pop$state == "S"]          # Susceptible workers out of isolation
     
+    # -------------------------------------
     # Step2: Build the workplace table
+    # -------------------------------------
     workplacetable <- data.frame(table(wid_list[select_pop$atwork == 1]))
     names(workplacetable) <- c("wid", "wsize")
     
@@ -426,7 +390,9 @@ work_exposure <- function(pop) {
     if (nrow(inf_worker) > 0) {
       contact <- c()
       
+      # -------------------------------------
       # Step3: Identify contacts for infectious workers
+      # -------------------------------------
       for (i in 1:nrow(inf_worker)) {
         select_worker <- inf_worker[i,]
         workplaceptid <- select_pop[select_pop$wid == select_worker$wid,]$ptid  # Fetch workers at the same workplace
@@ -441,7 +407,9 @@ work_exposure <- function(pop) {
         }
       }
       
+      # -------------------------------------
       # Step4: Build the contact table
+      # -------------------------------------
       if (length(contact) != 0) {
         contact_table <- data.frame(table(contact))
         names(contact_table) <- c("ptid", "expl")
@@ -467,18 +435,21 @@ work_exposure <- function(pop) {
 
 ```
 
-## 05.2 Detection function
+## 05.4 Detection function
 
 The `Detection` function detec infected people
 
 ```{r}
 Detection <- function(pop, v_TS){
   
-  # Detect individuals infected for 9 days
-  detected_individuals = (v_TS == pop$detect_time) & pop$state %!in% ending_states
+  # Arguments:
+  # pop: A data frame representing the entire population with individual's current health states and other relevant information.
+  # v_TS: A vector representing time since onset of illness for each individual in 'pop'.
+  # Returns:
+  # A modified version of the 'pop' data frame with updated states for detected individuals, especially indicating those under quarantine.
   
-  # Update the new detection count in the population data
-  pop$new_detection = sum(detected_individuals)
+  # Detect individuals infected for 9 days
+  detected_individuals = (v_TS == pop$detect_time) & pop$state != "R"
   
   # Update state of newly detected individuals not in isolation states to include quarantine ("Q")
   new_iso = detected_individuals & pop$state %!in% iso_states
@@ -492,7 +463,7 @@ Detection <- function(pop, v_TS){
 ```
 
 
-## 05.4 Microsimulation function
+## 05.5 Microsimulation function
 
 Below we develop the microsimulation function that allows the model to be run.
 
@@ -564,7 +535,7 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
     prob_new_state = df_X$state
     
     # Update vectors with new infection, total infection, and detection counts.
-    v_detected_daily[t] = df_X$new_detection[1]
+    v_detected_daily[t] =  sum((v_TS == df_X$detect_time) & prob_new_state$state != "R")
     v_total_inf_daily[t] = sum(prob_new_state %in% all_infect_states)
     v_new_inf_daily[t] = sum((m_M[, t] %in% sus_states   & prob_new_state %in% all_infect_states ))
 
