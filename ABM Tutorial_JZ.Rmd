@@ -43,7 +43,7 @@ p_load_gh("DARTH-git/darthtools")
 
 
 In this basic ABM we assume that individuals can be be in one of 5 states:  1. susceptible to an infection, 2.infected and infectious but not in quarantine, 3.infected in quarantine, 4. recovered. Recovery is assumed to be a saturating state. We assumed that the quarantine period is 14 days from infection for all infected individuals. We further assumed that for the first day of the disease individuals are infectious although asymptomatic, and that as soon as there are symptoms individuals will self-quarantine. We further assumed perfect adherence to quarantine protocols. 
-We developed a agent based model where we assumed a daily cycle length. We modelled a hypothetical environment where indiciduals will go to work and can be infected at work and in the community but cannot infect others at home. We used the model to prospectively estimate a 60 day period. We assumed a latency of 4 days from acquiring the infection until symptom development 
+We developed a agent based model where we assumed a daily cycle length. We modelled a hypothetical environment where indiciduals will go to work and can be infected at work and in the community but cannot infect others at home. We used the model to prospectively estimate a 60 day period. We assumed a latency of 4 days from acquiring the infection until symptom development.
 
 
 
@@ -102,8 +102,8 @@ p_TransmitWork        <- 0.02 # atwork transmission probability per interaction
 
 # Determine the initial number of 'S' (susceptible) and 'I' (infected) agents based on seed_ratio
 seed_ratio <- 0.3
-n_S <- round((1 - seed_ratio) * npop)
-n_I <- npop - n_S
+n_S <- round((1 - seed_ratio) * n_i)
+n_I <- n_i - n_S
 ```
 
 
@@ -116,9 +116,9 @@ n_I <- npop - n_S
 
 # Create agent matrix
 df_X <- data.frame(
-  ptid = 1:npop,  # Assign individual IDs
-  Sex = sample(x = c("Female", "Male"), prob = c(0.5, 0.5), size = npop, replace = TRUE),  # Random gender assignment
-  Age = round(rnorm(npop, mean=40, sd=10), digits = 0),  # Age drawn from a normal distribution
+  ptid = 1:n_i,  # Assign individual IDs
+  Sex = sample(x = c("Female", "Male"), prob = c(0.5, 0.5), size = n_i, replace = TRUE),  # Random gender assignment
+  Age = round(rnorm(n_i, mean=40, sd=10), digits = 0),  # Age drawn from a normal distribution
   wid = 0,  # Workplace ID
   qtime = 0,  # Quarantine time clock
   time = 0   # Total quarantine time
@@ -134,13 +134,13 @@ df_X$Age[df_X$Age < 19] <- 19 # only adults
 # Define workplace structure and IDs
 work_size <- c(5, 6, 7)
 p_work_size <- work_size / sum(work_size)
-work_num <- floor(npop * p_work_size / work_size)[1]
+work_num <- floor(n_i * p_work_size / work_size)[1]
 work_id <- c(
   rep(1:work_num, each = work_size[1]),
   rep((work_num + 1):(work_num*2), each = work_size[2]),
   rep((work_num*2 + 1):(work_num*3), each = work_size[3])
 )
-work_id <- sample(c(work_id, rep((max(work_id) + 1), each = (npop - length(work_id)))))
+work_id <- sample(c(work_id, rep((max(work_id) + 1), each = (n_i - length(work_id)))))
 df_X$wid <- work_id
 
 # Initialize other agent attributes
@@ -186,11 +186,10 @@ infect_prob <- function(prob,exposure) {
 }
 
 
-Probs <- function(M_t, df_X, v_Ts) { 
+Probs <- function(M_t, df_X) { 
   # Arguments:
   # M_t:  health state occupied at cycle t (character variable)
   # df_X: data frame with individual characteristics data 
-  # v_Ts: vector with the duration of being infected
   # Returns: 
   # transition probabilities for that cycle
   
@@ -522,7 +521,7 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
     m_expl[,t] <- df_X$expl
     
     # Calculate transition probabilities based on current health state and exposure.
-    m_P <- Probs(m_M[, t], df_X, v_Ts)
+    m_P <- Probs(m_M[, t], df_X)
 
     # Validate transition probabilities.
     check_transition_probability(m_P, verbose = TRUE)
@@ -535,7 +534,7 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
     prob_new_state = df_X$state
     
     # Update vectors with new infection, total infection, and detection counts.
-    v_detected_daily[t] =  sum((v_TS == df_X$detect_time) & prob_new_state$state != "R")
+    v_detected_daily[t] =  sum((v_Ts == df_X$detect_time) & prob_new_state != "R")
     v_total_inf_daily[t] = sum(prob_new_state %in% all_infect_states)
     v_new_inf_daily[t] = sum((m_M[, t] %in% sus_states   & prob_new_state %in% all_infect_states ))
 
