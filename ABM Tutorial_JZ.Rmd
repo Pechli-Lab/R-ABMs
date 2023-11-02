@@ -39,6 +39,18 @@ p_load_gh("DARTH-git/darthtools")
 ```{r}
 #negate function
 `%!in%`                      <- Negate(`%in%`)
+
+
+# Calculate the infection probability by every cycle, assuming the probability increases by number exposures
+infect_prob <- function(prob,exposure) { 
+  # Arguments:
+  # prob:     the probability of infection in one time contact
+  # exposure: the time of being exposed to infectious individuals
+  # Returns: 
+  # the probability of being infected based on certain exposure time
+  return(1 - (1 - prob) ^ (exposure))   # 1 - prob is the prob of being safe, 
+  # 1 minus the prob of always being safe is the prob of getting infection
+}
 ```
 
 
@@ -114,6 +126,11 @@ n_I <- n_i - n_S
 ```{r}
 # Initialize a population dataframe for an agent-based model
 
+age_mean  <- 40
+age_sd    <- 10
+p_male    <- 0.5
+age_lim   <- 19
+
 # Create agent matrix
 df_X <- data.frame(
   ptid = 1:n_i,  # Assign individual IDs
@@ -174,18 +191,6 @@ df_X$contact_num[work_in_sample] <- work_place_size$contact_num
 The `Probs` function updates the transition probabilities of every cycle is shown below.
 
 ```{r}
-# Calculate the infection probability by every cycle
-infect_prob <- function(prob,exposure) { 
-  # Arguments:
-  # prob:     the probability of infection in one time contact
-  # exposure: the time of being exposed to infectious individuals
-  # Returns: 
-  # the probability of being infected based on certain exposure time
-  return(1 - (1 - prob) ^ (exposure))   # 1 - prob is the prob of being safe, 
-  # 1 minus the prob of always being safe is the prob of getting infection
-}
-
-
 Probs <- function(M_t, df_X) { 
   # Arguments:
   # M_t:  health state occupied at cycle t (character variable)
@@ -201,22 +206,25 @@ Probs <- function(M_t, df_X) {
   #Calculate the probability of being infected for susceptible people
   sus <- df_X[df_X$state == "S",] #identify those susceptible
   
-  sus_prob_home = p_TransmitCommunity 
+
+  sus_prob_home = p_TransmitCommunity  # if it is probability, use p_sus
   
   sus_prob = rep(0,nrow(sus))
-  at_work = sus$contact_type == 1
+  at_work = sus$contact_type == 1 # remove contact_type everyone is at work.
   if(sum(at_work) > 0){
-    work_infect = infect_prob(p_TransmitWork,sus[at_work,]$expl)
-    sus_prob[sus$expl > 0 & sus$contact_type == 1] = work_infect
+    work_infect = infect_prob(p_TransmitWork,sus[at_work,]$expl)  # if it is probability, use p_. # use num_contacts instead of expl
+    sus_prob[sus$expl > 0 & sus$contact_type == 1] = work_infect # if it is probability, use p_.
   }
-  p_Sus_Inf <- (1- ((1- sus_prob_home) * (1 - sus_prob))) # 1 minus the prob of being safe all day
+  # p_work_infect = infect_prob(p_TransmitWork,sus$expl)
+  
+  p_Sus_Inf <- (1- ((1-  p_TransmitCommunity ) * (1 - sus_prob))) # p_work_infect  1 minus the prob of being safe all day
   
 
   #Calculate the probability of being infected for susceptible quarantine
   sus_Q <- df_X[df_X$state == "SQ",] #identify those susceptible
   
   #check exposure number
-  sus_prob_home_Q  <- rep(p_TransmitCommunity, nrow(sus_Q)) 
+  sus_prob_home_Q  <- rep(p_TransmitCommunity, nrow(sus_Q)) # try to turn it off
 
   
   # the 5 health states of the model:
@@ -234,36 +242,39 @@ Probs <- function(M_t, df_X) {
   m_p_t["IQ"                                  , M_t == "S"]                    <- 0
   m_p_t["R"                                   , M_t == "S"]                    <- 0
   
+  #no need for the rest.
   
-  #susceptible quarantine
-  m_p_t["S"                                   , M_t == "SQ"]                   <- 1 -  sus_prob_home_Q
-  m_p_t["SQ"                                  , M_t == "SQ"]                   <- 0
-  m_p_t["I"                                   , M_t == "SQ"]                   <- 0
-  m_p_t["IQ"                                  , M_t == "SQ"]                   <- sus_prob_home_Q
-  m_p_t["R"                                   , M_t == "SQ"]                   <- 0
+  #
   
-  #infected
-  m_p_t["S"                                   , M_t == "I" ]                   <- 0
-  m_p_t["SQ"                                  , M_t == "I" ]                   <- 0
-  m_p_t["I"                                   , M_t == "I"]                    <- 1
-  m_p_t["IQ"                                  , M_t == "I"]                    <- 0
-  m_p_t["R"                                   , M_t == "I"]                    <- 0
-  
-  #infected quarantine
-  m_p_t["S"                                   , M_t == "IQ"]                   <- 0
-  m_p_t["SQ"                                  , M_t == "IQ"]                   <- 0
-  m_p_t["I"                                   , M_t == "IQ"]                   <- 0
-  m_p_t["IQ"                                  , M_t == "IQ"]                   <- 1
-  m_p_t["R"                                   , M_t == "IQ"]                   <- 0
-  
-  
-  #recover ending state
-  m_p_t["S"                                   , M_t == "R"]                    <- 0
-  m_p_t["SQ"                                  , M_t == "R"]                    <- 0
-  m_p_t["I"                                   , M_t == "R"]                    <- 0
-  m_p_t["IQ"                                  , M_t == "R"]                    <- 0
-  m_p_t["R"                                   , M_t == "R"]                    <- 1
-   
+  # #susceptible quarantine
+  # m_p_t["S"                                   , M_t == "SQ"]                   <- 0
+  # m_p_t["SQ"                                  , M_t == "SQ"]                   <- 1
+  # m_p_t["I"                                   , M_t == "SQ"]                   <- 0
+  # m_p_t["IQ"                                  , M_t == "SQ"]                   <- 0
+  # m_p_t["R"                                   , M_t == "SQ"]                   <- 0
+  # 
+  # #infected
+  # m_p_t["S"                                   , M_t == "I"]                    <- 0
+  # m_p_t["SQ"                                  , M_t == "I"]                    <- 0
+  # m_p_t["I"                                   , M_t == "I"]                    <- 1
+  # m_p_t["IQ"                                  , M_t == "I"]                    <- 0
+  # m_p_t["R"                                   , M_t == "I"]                    <- 0
+  # 
+  # #infected quarantine
+  # m_p_t["S"                                   , M_t == "IQ"]                   <- 0
+  # m_p_t["SQ"                                  , M_t == "IQ"]                   <- 0
+  # m_p_t["I"                                   , M_t == "IQ"]                   <- 0
+  # m_p_t["IQ"                                  , M_t == "IQ"]                   <- 1
+  # m_p_t["R"                                   , M_t == "IQ"]                   <- 0
+  # 
+  # 
+  # #recover ending state
+  # m_p_t["S"                                   , M_t == "R"]                    <- 0
+  # m_p_t["SQ"                                  , M_t == "R"]                    <- 0
+  # m_p_t["I"                                   , M_t == "R"]                    <- 0
+  # m_p_t["IQ"                                  , M_t == "R"]                    <- 0
+  # m_p_t["R"                                   , M_t == "R"]                    <- 1
+  #  
   
   return(t(m_p_t))
 }  
@@ -274,6 +285,9 @@ Probs <- function(M_t, df_X) {
 ## 05.2 Quanrantine Function
 
 ```{r}
+
+#make pop the only people in quarantine SQ + IQ
+
 
 #Quarantine_Check can update the quarantine clock at current time cycle
 Quarantine_Check <- function(pop, pre_state){
@@ -289,23 +303,25 @@ Quarantine_Check <- function(pop, pre_state){
   
   # People in quarantine:
   
-  # condition 1: reset quarantine clock for those who become infected or have close contact with infected people during quarantine
-  new_infected_in_Q          = which(pop$state %in% infect_states_iso & pre_state == "SQ") #got infected in quarantine
-  
-  reset_workplace            = unique(pop$wid[new_infected_in_Q])
-  reset_people               = pop$wid %in% reset_workplace #find all the people who had expose in workplace quarantine
-  
+  # we dont have people infetect in quarantine
+  # 
+  # # condition 1: reset quarantine clock for those who become infected or have close contact with infected people during quarantine
+  # new_infected_in_Q          = which(pop$state %in% infect_states_iso & pre_state == "SQ") #got infected in quarantine
+  # 
+  # reset_workplace            = unique(pop$wid[new_infected_in_Q])
+  # reset_people               = pop$wid %in% reset_workplace #find all the people who had expose in workplace quarantine
+  # 
   
   # condition 2: find people are going to be released from quarantine
   # check if quarantine clock hit q_maxtime
-  full_q                     = pop$qtime == q_maxtime & !reset_people & pop$state != "R" 
+  full_q                     = pop$qtime == q_maxtime # & pop$state != "R" # & !reset_people # if you've been recovered you are exempt from quarantine only do quarantine once.
   
   #find susceptible people and infected people who meet quarantine time
   sus_full_q                 = full_q & pop$state == "SQ"
-  inf_full_q                 = full_q & pop$state %in% infect_states_iso 
+  inf_full_q                 = full_q & pop$state == "IQ"
   
   # condition 3: find people who stay in quarantine and the quarantine clock has to be incremented.
-  else_q                     = (pop$qtime < q_maxtime & pop$qtime >0) & !reset_people & pop$state != "R"  
+  else_q                     = # !full_q            #pop$qtime < q_maxtime # & pop$qtime >0) #& !reset_people & pop$state != "R"  
   
   # Other people:
   # condition 4: find newly infected people entering quarantine NOTE: people enter quarantine by detection
@@ -448,11 +464,15 @@ Detection <- function(pop, v_TS){
   # A modified version of the 'pop' data frame with updated states for detected individuals, especially indicating those under quarantine.
   
   # Detect individuals infected for 9 days
-  detected_individuals = (v_TS == pop$detect_time) & pop$state != "R"
+  detected_individuals = (v_TS == detect_time) & pop$state == "I"  # we dont' need pop$detect_time
+  
+  # if the state is I, and the time is 9 
   
   # Update state of newly detected individuals not in isolation states to include quarantine ("Q")
   new_iso = detected_individuals & pop$state %!in% iso_states
-  pop$state[new_iso] = paste(pop$state[new_iso], "Q", sep = "")
+  pop$state[new_iso] = paste(pop$state[new_iso], "Q", sep = "") #  IQ is infected 
+  
+
   
   return(pop)
 }
