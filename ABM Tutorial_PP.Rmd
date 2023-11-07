@@ -90,19 +90,20 @@ sus_states                   <- c("S","SQ")
 
 
 ```
-We assume a 
+We assume a synthetic cohort where 30% of the populatoin is infected at time 0
 
 
 ```{r}
 #### Deterministic analysis ####
 
 # input for Creating the synthetic cohort'
-n_S <- round(0.7 * npop) # number of susceptible at time 0
+npop <- 100000 
+n_S  <- round(0.7 * npop) # number of susceptible at time 0
+n_I  <- npop - n_S        # number of infected at time 0
 
 
 
 #Transition probabilities
-#(all terminal probabilities are conditional on not being admitted/recovered)
 
 #probability of being detected
 p_detect_overall <- 0.3
@@ -132,57 +133,46 @@ p_TransmitWork        <- 0.0220595686685414
 
 ```{r}
 #initialize population dataframe
-create_abmpop <- function(npop){
-  # Arguments:
-  # npop: number of people in the population
-  # Returns: 
-  # new population dataframe with initialized states
+
   
-  
-  #create matrix of agent
-  agents = data.frame(ptid = 1:npop, # assign id 
+  #create matrix of with baseline characteristics. 
+  df_X = data.frame(ptid = 1:npop, # assign id 
                       Sex = sample(x = c("Female", "Male"),
                                    prob = c(0.5, 0.5), 
                                    size = npop, 
-                                   replace = TRUE) , #Randomly generate gender
-                      Age = round(rnorm(npop, mean=30, sd=15), 
+                                   replace = TRUE) , #Randomly generate sex
+                      Age = 19 + round(rnorm(npop, mean=30, sd=5), 
                                   digits = 0), # draw Age from a normal distribtion
                       wid = 0, #workplace id
                       fid = 0, #family id
-                      qtime = 0, #quarantine time clock
-                      time = 0, # number of total quarantine times
-                      state = "S") #initialized state of everyone is healthy
+                      qtime = 0 #quarantine time clock
+                      )
   
   #intial state
   
-  # Number of 'S' and 'I' based on 7:3 ratio
+
+  df_X$state <- sample(c(rep("S", n_S), rep("I", n_I))) # sample-scramble the S and I 
   
-  n_I <- npop - n_S
-  # Create the initial state assignments
-  agents$state <- sample(c(rep("S", n_S), rep("I", n_I)))
+  agents$Age[agents$Age < 19] <- 19 # assume all are adults 
+  family_size                 <- c(1, 2, 3, 4) # family size can be 1 2 3 4
+  p_family_size               <- family_size / sum(family_size) # weights of each family size
   
-# Add age_group based on Age
-  agents$Age[agents$Age < 19] <- 19 # only adults
-  agents$Age_group <- ifelse(agents$Age <= 10, 1,
-                         ifelse(agents$Age <= 17, 2, 3))
   
-  family_size = c(1,2,3,4) # family size can be 1 2 3 4
-  p_family_size = family_size/sum(family_size) # weights of each family size
+  # PP: what is this doing? and why is there no sampling here?
+  fam_num            <- floor(npop * p_family_size / family_size)[1]
+  fam_id             <- c(rep(1:fam_num, each = family_size[1]),
+                          rep((fam_num + 1)    :(fam_num * 2), each = family_size[2]),
+                          rep((fam_num * 2 + 1):(fam_num * 3), each = family_size[3]),
+                          rep((fam_num * 3 + 1):(fam_num * 4), each = family_size[4]))
   
-  fam_num = floor(npop * p_family_size / family_size)[1]
-  fam_id  = c(rep(1:fam_num,each = family_size[1]),
-              rep((fam_num + 1): (fam_num*2),each=family_size[2]),
-              rep((fam_num*2 + 1):(fam_num*3),each=family_size[3]),
-              rep((fam_num*3 + 1):(fam_num*4),each=family_size[4]))
+  fam_id = c(fam_id, rep((max(fam_id) + 1), each = (npop - length(fam_id))))
   
-  fam_id = c(fam_id,rep((max(fam_id) + 1),each = (npop - length(fam_id))))
-  
-  work_size = c(5,7,8) # workplace size is set to 5,7,8
-  p_work_size = work_size/sum(work_size) # weights of each work size
+  work_size = c(5, 7, 8) # workplace size is set to 5,7,8 PP: why 5,7 ,8?
+  p_work_size = work_size / sum(work_size) # weights of each work size
   work_num = floor(npop * p_work_size / work_size)[1]
   work_id  = c(rep(1:work_num,each = work_size[1]),
-               rep((work_num + 1): (work_num*2),each=work_size[2]),
-               rep((work_num*2 + 1):(work_num*3),each=work_size[3]))
+               rep((work_num     + 1):(work_num * 2), each = work_size[2]),
+               rep((work_num * 2 + 1):(work_num * 3), each = work_size[3]))
   
   work_id = sample(c(work_id,rep((max(work_id) + 1),each = (npop - length(work_id)))))
   
