@@ -95,10 +95,10 @@ p_TransmitCommunity   <- 0.08                           # daily community transm
 # atwork \ university
 p_TransmitWork        <- 0.02                           # daily at work transmission probability per interaction
 
-# Determine the initial number of 'S' (susceptible) and 'I' (infected) agents based on seed_ratio
-seed_ratio <- 0.3                                       # proportion of seed infected people when initializing the simulation population  
-n_S <- round((1 - seed_ratio) * n_i)
-n_I <- n_i - n_S
+# Determine the initial number of 'S' (susceptible) and 'I' (infected) agents based on seed ratio
+p_seed_ratio <- 0.3                                     # proportion of seed infected agents when initializing the simulation population  
+n_S <- round((1 - p_seed_ratio) * n_i)                  # number of initialized susceptible agents
+n_I <- n_i - n_S                                        # number of initialized infected agents
 
 
 # workplace characteristics 
@@ -122,17 +122,17 @@ age_lim   <- 18
 
 # Create agent matrix
 df_X <- data.frame(
-  ptid = 1:n_i,                                     # Assign individual IDs
+  pid = 1:n_i,                                         # Assign individual IDs
   Sex  = sample(x = c("Female", "Male"), 
                 prob = c(p_male,1 - p_male), 
-                size = n_i, replace = TRUE),        # Random gender assignment
+                size = n_i, replace = TRUE),           # Random gender assignment
   Age = round(rnorm(n_i, 
                     mean = age_mean,
                     sd = age_sd),
-              digits = 0),                    # Age drawn from a normal distribution
-  wid   = 0,  # Workplace ID
-  qtime = 0,  # Quarantine time clock
-  time  = 0   # Total quarantine time
+              digits = 0),                             # Age drawn from a normal distribution
+  wid   = 0,                                           # Workplace ID
+  qtime = 0,                                           # Quarantine time clock
+  time  = 0                                            # Total quarantine time
 )
 
 
@@ -302,7 +302,7 @@ work_exposure <- function(pop) {
   
   # Arguments:
   # pop: A data frame representing the entire population. It should contain columns such as 'atwork', 'expl', 
-  #      'state', 'wid', 'ptid', and others that are relevant to the exposure at work.
+  #      'state', 'wid', 'pid', and others that are relevant to the exposure at work.
   # Returns:
   # A modified version of the 'pop' data frame with updated exposure levels ('expl') and possibly other columns 
   # based on interactions at the workplace.
@@ -321,7 +321,7 @@ work_exposure <- function(pop) {
     infectious <- select_pop$state %in% infect_states                           # Identify infectious individuals
     wid_list <- select_pop$wid                                                  # List of workplace IDs
     out_of_iso <- select_pop$state %!in% iso_states                             # Workers out of isolation
-    ptid_list <- select_pop$ptid[out_of_iso & select_pop$state == "S"]          # Susceptible workers out of isolation
+    pid_list <- select_pop$pid[out_of_iso & select_pop$state == "S"]          # Susceptible workers out of isolation
     
     # -------------------------------------
     # Step2: Build the workplace table
@@ -341,8 +341,8 @@ work_exposure <- function(pop) {
       # -------------------------------------
       for (i in 1:nrow(inf_worker)) {
         select_worker <- inf_worker[i,]
-        workplaceptid <- select_pop[select_pop$wid == select_worker$wid,]$ptid  # Fetch workers at the same workplace
-        to_contact <- workplaceptid[!workplaceptid %in% select_worker$ptid]     # Exclude the current worker
+        workplacepid <- select_pop[select_pop$wid == select_worker$wid,]$pid  # Fetch workers at the same workplace
+        to_contact <- workplacepid[!workplacepid %in% select_worker$pid]     # Exclude the current worker
         
         # Determine contacts based on the contact number
         if (length(to_contact) > 1) {
@@ -358,15 +358,15 @@ work_exposure <- function(pop) {
       # -------------------------------------
       if (length(contact) != 0) {
         contact_table <- data.frame(table(contact))
-        names(contact_table) <- c("ptid", "expl")
+        names(contact_table) <- c("pid", "expl")
         
         # Convert to numeric types
-        contact_table$ptid <- as.numeric(as.character(contact_table$ptid))
+        contact_table$pid <- as.numeric(as.character(contact_table$pid))
         contact_table$expl <- as.numeric(as.character(contact_table$expl))
         
         # Update exposure levels
-        expl_list[select_pop$ptid %in% contact_table$ptid] <- expl_list[select_pop$ptid %in% contact_table$ptid] + contact_table$expl
-        allpop[allpop$ptid %in% contact_table$ptid,]$contact_type <- 3
+        expl_list[select_pop$pid %in% contact_table$pid] <- expl_list[select_pop$pid %in% contact_table$pid] + contact_table$expl
+        allpop[allpop$pid %in% contact_table$pid,]$contact_type <- 3
       }
     }
     
