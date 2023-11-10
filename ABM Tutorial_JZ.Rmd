@@ -65,45 +65,44 @@ We developed a agent based model where we assumed a daily cycle length. We model
 
 ```{r}
 ## General setup
-set.seed(1)                                      # set the seed 
-n_cycles        <- 100                           # number of cycles
-n_i             <- 10000                         # number of individuals
-q_maxtime                   <- 14                # quarantine period
-latentperiod                <- 4                 # incubation period: time from receiving virus to being infectious
-detect_time                 <- 9                 # # becoming infetious to isolation d
-recover_days                <- 14                # days to recover from being infected
+set.seed(1)                                             # set the seed 
+n_cycles                    <- 100                      # number of cycles
+n_i                         <- 10000                    # number of individuals
+q_maxtime                   <- 14                       # quarantine period
+latentperiod                <- 4                        # incubation period: time from receiving virus to being infectious
+detect_time                 <- 9                        # becoming infetious to isolation
+recover_days                <- 14                       # days to recover from being infected
 
 
 # the 5 health states of the model:
-v_names_states  <- c("S",   # Susceptble 
-                     "SQ",  # Susceptble quarantine 
-                     "I",   # Infected
-                     "IQ",  # Infected quarantine
-                     "R")   # Recovered      
+v_names_states  <- c("S",                               # Susceptble 
+                     "SQ",                              # Susceptble quarantine 
+                     "I",                               # Infected
+                     "IQ",                              # Infected quarantine
+                     "R")                               # Recovered      
 
-v_names_cycles  <- paste("cycle", 0:n_cycles)    # cycle names
-n_states        <- length(v_names_states)        # number of health states 
+v_names_cycles  <- paste("cycle", 0:n_cycles)           # cycle names
+n_states        <- length(v_names_states)               # number of health states 
 
 
 #Transition probabilities
 
 #infection probabilities vary by location
-# community
 
-p_TransmitCommunity   <- 0.08 #daily community transmission probability 
+# community
+p_TransmitCommunity   <- 0.08                           # daily community transmission probability 
 
 # atwork \ university
-p_TransmitWork        <- 0.02 # atwork transmission probability per interaction
+p_TransmitWork        <- 0.02                           # daily at work transmission probability per interaction
 
 # Determine the initial number of 'S' (susceptible) and 'I' (infected) agents based on seed_ratio
-seed_ratio <- 0.3
+seed_ratio <- 0.3                                       # proportion of seed infected people when initializing the simulation population  
 n_S <- round((1 - seed_ratio) * n_i)
 n_I <- n_i - n_S
 
 
 # workplace characteristics 
-
-work_size <- c(5, 6, 7) # we assume workplaces with sizes of 5 to 7 people. this could be also a work group inside a larger workplace
+work_size <- c(5, 6, 7)                                 # we assume workplaces with sizes of 5 to 7 people
 
 
 ```
@@ -123,9 +122,14 @@ age_lim   <- 18
 
 # Create agent matrix
 df_X <- data.frame(
-  ptid = 1:n_i,  # Assign individual IDs
-  Sex  = sample(x = c("Female", "Male"), prob = c(p_male,1 - p_male), size = n_i, replace = TRUE),  # Random gender assignment
-  Age = round(rnorm(n_i, mean = age_mean, sd = age_sd), digits = 0),  # Age drawn from a normal distribution
+  ptid = 1:n_i,                                     # Assign individual IDs
+  Sex  = sample(x = c("Female", "Male"), 
+                prob = c(p_male,1 - p_male), 
+                size = n_i, replace = TRUE),        # Random gender assignment
+  Age = round(rnorm(n_i, 
+                    mean = age_mean,
+                    sd = age_sd),
+              digits = 0),                    # Age drawn from a normal distribution
   wid   = 0,  # Workplace ID
   qtime = 0,  # Quarantine time clock
   time  = 0   # Total quarantine time
