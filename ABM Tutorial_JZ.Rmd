@@ -189,37 +189,34 @@ df_X$n_contact           <- sapply(n_worksize,
 The `Probs` function updates the transition probabilities of every cycle is shown below.
 
 ```{r}
-Probs <- function(M_t, df_X) { 
+Probs <- function(df_X) { 
   # Arguments:
-  # M_t:  health state occupied at cycle t (character variable)
   # df_X: data frame with individual characteristics data 
   # Returns: 
   # transition probabilities for that cycle
   
   # create matrix of state transition probabilities
-  m_p_t                  <- matrix(0, nrow = n_states, ncol = n_i)  
+  m_p_t                  <- matrix(0, nrow = n_states, ncol = n_i)
+  M_t                    <- df_X$state                    # M_t:  health state occupied at cycle t (character variable)
   # give the state names to the rows
-  rownames(m_p_t)        <- v_names_states                            
+  rownames(m_p_t)        <- v_names_states                         
   
   #Calculate the probability of being infected for susceptible people
-  df_X_sus               <- df_X[df_X$state == "S",]      #identify those susceptible
+  df_X_sus               <- df_X[M_t  == "S",].           # identify those susceptible
   
-  p_sus                  <- fun_infect_prob(p_TransmitWork, df_X_sus$n_exposure) 
-
+  p_infect_prob          <- fun_infect_prob(p_TransmitWork, df_X_sus$n_exposure)
+  
   p_Sus_Inf              <- (1- ((1-  p_TransmitCommunity ) *
                                    (1 - p_sus)))          # p_work_infect  1 minus the prob of being safe all day
-  
 
   #Calculate the probability of being infected for susceptible quarantine
   
   #susceptible 
-  m_p_t["S"     , M_t == "S"]        <- 1 - p_Sus_Inf
-  m_p_t["SQ"    , M_t == "S"]        <- 0
-  m_p_t["I"     , M_t == "S"]        <- p_Sus_Inf
-  m_p_t["IQ"    , M_t == "S"]        <- 0
-  m_p_t["R"     , M_t == "S"]        <- 0
+  m_p_t["S"     , M_t == "S"]        <- 1 - p_Sus_Inf     # Prob: stay in S state
+  m_p_t["I"     , M_t == "S"]        <- p_Sus_Inf         # Prob: transit from S to I
   
-  }  
+  return(m_p_t)
+}  
 
 
 ```
@@ -308,7 +305,7 @@ Quarantine_Check <- function(df_pop){
 ```{r}
 
 # Exposure_Check calculates the exposure of workers at their workplace
-work_exposure <- function(pop) {
+fun_work_exposure <- function(pop) {
   
   # Arguments:
   # pop: A data frame representing the entire population. It should contain columns such as 'atwork', 'expl', 
@@ -444,25 +441,26 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
   
   # Initialization of matrices to store:
   # m_M: health state information over time for every individual.
-  # m_vts: track the number of days since an individual got infected.
-  # m_expl: track exposure levels for individuals.
+  # m_Ts: track the number of days since an individual got infected.
+  # m_exposure: track exposure levels for individuals.
   # Each matrix has rows corresponding to individuals and columns corresponding to days.
   
   m_M <- matrix(nrow = n_i, ncol = n_cycles + 1, 
                 dimnames = list(paste("ind", 1:n_i, sep = " "), 
                                 paste("cycle", 0:n_cycles, sep = " "))) 
-  m_vts <- matrix(nrow = n_i, ncol = n_cycles + 1, 
+  m_Ts <- matrix(nrow = n_i, ncol = n_cycles + 1, 
                   dimnames = list(paste("ind", 1:n_i, sep = " "), 
                                   paste("cycle", 0:n_cycles, sep = " ")))
-  m_expl <- matrix(nrow = n_i, ncol = n_cycles, 
+  m_exposure <- matrix(nrow = n_i, ncol = n_cycles, 
                    dimnames = list(paste("ind", 1:n_i, sep = " "), 
                                    paste("cycle", 1:n_cycles, sep = " ")))
 
   # Set initial health state and time since illness onset for each individual.
-  m_M[, 1] <- as.character(df_X$state)
-  m_vts[,1] <- df_X$v_Ts  
+  m_M[, 1] <- df_X$state
+  m_Ts[,1] <- df_X$v_Ts
+  
   v_Ts <- df_X$v_Ts    
-  v_inf <- rep(0, n_i)  
+  v_inf <- rep(0, n_i)
 
   # Initialize vectors to store daily counts of total infections, new infections, and detected cases.
   v_total_inf_daily <- rep(0,n_cycles)
@@ -474,15 +472,13 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
     
     # Reset exposure and contact type levels for each individual.
     df_X$n_exposure <- 0
-    df_X$n_exposure_home <- 0
-    df_X$contact_type <- 0
 
     # Calculate exposure at work for each individual.
     df_X <- work_exposure(df_X)
-    m_expl[,t] <- df_X$n_exposure
+    m_exposure[,t] <- df_X$n_exposure
     
     # Calculate transition probabilities based on current health state and exposure.
-    m_P <- Probs(m_M[, t], df_X)
+    m_P <- Probs(df_X)
 
     # Validate transition probabilities.
     check_transition_probability(m_P, verbose = TRUE)
@@ -505,7 +501,7 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
 
     # Update the time since illness onset for next day.
     v_Ts <- if_else(qc_state %in% all_infect_states, v_Ts + 1, 0)
-    m_vts[,t + 1] = v_Ts
+    m_Ts[,t + 1] = v_Ts
 
     # Update individuals who have reached recovery time to 'R' state.
     v_go_to_recover <- if_else(v_Ts >= t_recover, TRUE, FALSE)
