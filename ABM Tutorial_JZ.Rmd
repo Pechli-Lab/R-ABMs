@@ -105,7 +105,7 @@ n_I                      <- n_i - n_S                   # number of initialized 
 
 
 # workplace characteristics 
-v_workplace_size           <- c(5, 6, 7)                  # we assume workplaces with sizes of 5 to 7 people
+v_workplace_size         <- c(5, 6, 7)                  # we assume workplaces with sizes of 5 to 7 people
 
 
 ```
@@ -151,15 +151,17 @@ v_work_id <- c(
   rep((n_workplace * 2 + 1):(n_workplace * 3), each = v_workplace_size[3])
 )
 
-n_remain                 <- n_i - length(work_id)
+
+n_remain                 <- n_i - length(v_work_id)
 v_more_workid            <- c()
-wid_new                  <- max(work_id) + 1
+wid_new                  <- max(v_work_id) + 1
 while(n_remain !=0){
   n_wid_new  <- ifelse(n_remain > min(v_workplace_size), min(v_workplace_size), n_remain)
   v_more_workid <- c(v_more_workid, rep(wid_new, n_wid_new))
   n_remain <- n_remain - n_wid_new
   wid_new <- wid_new + 1
 }
+
 
 v_work_id                <- sample(c(v_work_id,v_more_workid))
 df_X$wid                 <- v_work_id                    # Workplace ID
@@ -202,12 +204,12 @@ Probs <- function(df_X) {
   rownames(m_p_t)        <- v_names_states                         
   
   #Calculate the probability of being infected for susceptible people
-  df_X_sus               <- df_X[M_t  == "S",].           # identify those susceptible
+  v_exposure               <- df_X[M_t  == "S",]$n_exposure
   
-  p_infect_prob          <- fun_infect_prob(p_TransmitWork, df_X_sus$n_exposure)
+  p_infect_prob          <- fun_infect_prob(p_TransmitWork, v_exposure)
   
   p_Sus_Inf              <- (1- ((1-  p_TransmitCommunity ) *
-                                   (1 - p_sus)))          # p_work_infect  1 minus the prob of being safe all day
+                                   (1 - p_infect_prob)))          # p_work_infect  1 minus the prob of being safe all day
 
   #Calculate the probability of being infected for susceptible quarantine
   
@@ -226,7 +228,6 @@ Probs <- function(df_X) {
 ```{r}
 
 #make pop the only people in quarantine SQ + IQ
-
 
 #Quarantine_Check can update the quarantine clock at current time cycle
 Quarantine_Check <- function(df_pop){
@@ -251,6 +252,8 @@ Quarantine_Check <- function(df_pop){
   # reset_people               = pop$wid %in% reset_workplace #find all the people who had expose in workplace quarantine
   # 
   
+  
+  
   # condition 2: find people are going to be released from quarantine
   # check if quarantine clock hit t_iso_max
   full_q      <- df_pop$t_iso == t_iso_max # & pop$state != "R" # & !reset_people # if you've been recovered you are exempt from quarantine only do quarantine once.
@@ -264,7 +267,7 @@ Quarantine_Check <- function(df_pop){
   
   # Other people:
   # condition 4: find newly infected people entering quarantine NOTE: people enter quarantine by detection
-  new_infected               = which(df_pop$v_ti == t_detect ) #new infected generated from infected
+  new_infected                = which(df_pop$v_ti == t_detect ) #new infected generated from infected
   
   # condition t_iso_max: find newly infected people's dependencies in families and workpalces
   new_infected_workplace     = unique(df_pop$wid[new_infected]) #families have newly infected in quarantine cases
@@ -281,8 +284,8 @@ Quarantine_Check <- function(df_pop){
   
   # set new_quarantine clock to 1 
   pop$t_iso[new_qurantine]    = 1
-  pop$state[new_qurantine_add] = paste(pop$state[new_qurantine_add],"Q",sep = "") #update quarantine states
-  pop$time[new_qurantine]     = pop$time[new_qurantine]+1 #increment total quarantine time
+  pop$state[new_qurantine_add] = paste(pop$state[new_qurantine_add],"Q",sep = "") # update quarantine states
+  pop$time[new_qurantine]     = pop$time[new_qurantine]+1.                        # increment total quarantine time
   
   
   # release people with meet t_iso_max-days quarantine requirement
