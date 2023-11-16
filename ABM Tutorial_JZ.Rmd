@@ -230,10 +230,10 @@ Probs <- function(df_X) {
 #make pop the only people in quarantine SQ + IQ
 
 #Quarantine_Check can update the quarantine clock at current time cycle
-Quarantine_Check <- function(df_pop){
+Quarantine_Check <- function(df_pop, M_t){
   # Arguments:
   # pop: population dataframe of current time cycle t
-  # pre_state: states at previously cycle t-1
+  # M_t: states at current cycle t
   # Returns: 
   # new population dataframe with updated states
   
@@ -259,11 +259,11 @@ Quarantine_Check <- function(df_pop){
   full_q      <- df_pop$t_iso == t_iso_max # & pop$state != "R" # & !reset_people # if you've been recovered you are exempt from quarantine only do quarantine once.
   
   #find susceptible people and infected people who meet quarantine time
-  sus_full_q  <- full_q & df_pop$state == "SQ"
-  inf_full_q  <- full_q & df_pop$state == "IQ"
+  sus_full_q  <- full_q & M_t == "SQ"
+  inf_full_q  <- full_q & M_t == "IQ"
   
   # condition 3: find people who stay in quarantine and the quarantine clock has to be incremented.
-  # else_q                     = # !full_q            #pop$t_iso < t_iso_max # & pop$t_iso >0) #& !reset_people & pop$state != "R"  
+  # else_q                     = !full_q            pop$t_iso < t_iso_max # & pop$t_iso >0) #& !reset_people & pop$state != "R"  
   
   # Other people:
   # condition 4: find newly infected people entering quarantine NOTE: people enter quarantine by detection
@@ -274,11 +274,11 @@ Quarantine_Check <- function(df_pop){
   
   #new_infected_work= unique(pop$wid[new_infected]) #workplaces have newly infected in quarantine cases #comment out if same workplace contact don't need to be put in quarantine
   
-  new_qurantine   <- ((df_pop$wid %in% new_infected_workplace & df_pop$t_iso == 0) ) #people whose quarantine clocks have to be set to 1 including
-  new_qurantine_add <- new_qurantine & pop$state %!in% iso_states #find people need to be put in quarantine state
-  
-  
-  # -------------------------------------
+  new_qurantine    <- ((df_pop$wid %in% new_infected_workplace & df_pop$t_iso == 0) ) #people whose quarantine clocks have to be set to 1 including
+  exist_quarantine <- df_pop$t_iso  >0 & df_pop$t_iso < t_iso_max
+  pop$t_iso[new_qurantine]          = pop$t_iso[new_qurantine] + 1
+  pop$t_iso[exist_qurantine]        = pop$t_iso[new_qurantine] + 1
+    # -------------------------------------
   # Step2: Update quarantine clock
   # -------------------------------------
   
@@ -298,6 +298,11 @@ Quarantine_Check <- function(df_pop){
   #increment quarantine clock and total quarantine time for everyone else in quarantine
   pop$t_iso[else_q]           = pop$t_iso[else_q] + 1
   pop$time[else_q]            = pop$time[else_q] + 1
+  
+  M_t[df_pop$v_Ts == t_detect  & M_t =="I" ] <- "IQ"
+  M_t[df_pop$v_Ts == t_detect  & M_t =="IQ" ] <- "IQ"
+  
+  
   return (pop)
 }
 
