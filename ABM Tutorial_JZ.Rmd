@@ -172,7 +172,7 @@ df_X <- df_X %>%
   mutate(
     n_exposure <-  0,                                     # Exposure level
     n_contact <-  0,                                      # Number of contacts in a day
-    v_Ts <-  0,                                           # Time since being infected
+    v_Ti <-  0,                                           # Time since being infected
     t_iso = 0                                             # Quarantine time clock
   )
 
@@ -230,7 +230,7 @@ Probs <- function(df_X) {
 #make pop the only people in quarantine SQ + IQ
 
 #Quarantine_Check can update the quarantine clock at current time cycle
-Quarantine_Check <- function(df_pop, M_t){
+Quarantine_Check <- function(df_X){
   # Arguments:
   # pop: population dataframe of current time cycle t
   # M_t: states at current cycle t
@@ -245,6 +245,7 @@ Quarantine_Check <- function(df_pop, M_t){
   
   # we dont have people infetect in quarantine
   # 
+  
   # # condition 1: reset quarantine clock for those who become infected or have close contact with infected people during quarantine
   # new_infected_in_Q          = which(pop$state %in% infect_states_iso & pre_state == "SQ") #got infected in quarantine
   # 
@@ -256,26 +257,51 @@ Quarantine_Check <- function(df_pop, M_t){
   
   # condition 2: find people are going to be released from quarantine
   # check if quarantine clock hit t_iso_max
-  full_q      <- df_pop$t_iso == t_iso_max # & pop$state != "R" # & !reset_people # if you've been recovered you are exempt from quarantine only do quarantine once.
+  
+  v_release      <- df_X$t_iso == t_iso_max 
   
   #find susceptible people and infected people who meet quarantine time
-  sus_full_q  <- full_q & M_t == "SQ"
-  inf_full_q  <- full_q & M_t == "IQ"
-  
+
+  v_release_SQ     <- v_release_S & df_X == "SQ"
+  v_release_IQ     <- v_release_I & df_X == "IQ"
+    
   # condition 3: find people who stay in quarantine and the quarantine clock has to be incremented.
-  # else_q                     = !full_q            pop$t_iso < t_iso_max # & pop$t_iso >0) #& !reset_people & pop$state != "R"  
   
-  # Other people:
+   
+  v_in_iso <- df_X$t_iso < t_iso_max & df_X$t_iso > 0
+  
+  
   # condition 4: find newly infected people entering quarantine NOTE: people enter quarantine by detection
-  new_infected                = which(df_pop$v_ti == t_detect ) #new infected generated from infected
+  v_new_detected                <-  which(df_X$v_Ti == t_detect ) #new infected generated from infected
   
   # condition t_iso_max: find newly infected people's dependencies in families and workpalces
-  new_infected_workplace     = unique(df_pop$wid[new_infected]) #families have newly infected in quarantine cases
+  v_new_detected_workplace     = unique(df_X$wid[v_new_detected]) #families have newly infected in quarantine cases
+  
+  v_new_iso    <- (df_X$wid %in% v_new_detected_workplace & df_X$state != "R") #
+  
+  v_increment <- v_new_iso | v_in_iso
+  
+  df_X$t_iso[v_increment] <- df_X$t_iso[v_increment] + 1
+  
+  df_X$state[v_new_iso] <-  paste(pop$state[v_new_iso],"Q",sep = "")
+  
+  # release people with meet t_iso_max-days quarantine requirement
+  # - isolated susceptible people will go to susceptible
+  # - infected people will go to recovered
+  df_X$t_iso[v_release]           <-   0
+  df_X$state[v_release_SQ]        <-  "S" #when quarantine ends, state goes back to susceptible
+  df_X$state[v_release_IQ]        <-  "R" #when quarantine ends, state goes back to recovered
+  
+  
+  
+  
+  
+  
   
   #new_infected_work= unique(pop$wid[new_infected]) #workplaces have newly infected in quarantine cases #comment out if same workplace contact don't need to be put in quarantine
   
-  new_qurantine    <- ((df_pop$wid %in% new_infected_workplace & df_pop$t_iso == 0) ) #people whose quarantine clocks have to be set to 1 including
-  exist_quarantine <- df_pop$t_iso  >0 & df_pop$t_iso < t_iso_max
+  people whose quarantine clocks have to be set to 1 including
+  exist_quarantine <- df_X$t_iso  >0 & df_X$t_iso < t_iso_max
   pop$t_iso[new_qurantine]          = pop$t_iso[new_qurantine] + 1
   pop$t_iso[exist_qurantine]        = pop$t_iso[new_qurantine] + 1
     # -------------------------------------
@@ -299,11 +325,11 @@ Quarantine_Check <- function(df_pop, M_t){
   pop$t_iso[else_q]           = pop$t_iso[else_q] + 1
   pop$time[else_q]            = pop$time[else_q] + 1
   
-  M_t[df_pop$v_Ts == t_detect  & M_t =="I" ] <- "IQ"
-  M_t[df_pop$v_Ts == t_detect  & M_t =="IQ" ] <- "IQ"
+  M_t[df_X$v_Ti == t_detect  & M_t =="I" ] <- "IQ"
+  M_t[df_X$v_Ti == t_detect  & M_t =="IQ" ] <- "IQ"
   
   
-  return (pop)
+  return (df_X)
 }
 
 ```
@@ -401,16 +427,16 @@ fun_work_exposure <- function(pop) {
 The `Detection` function detec infected people
 
 ```{r}
-Detection <- function(pop, v_TS){
+Detection <- function(pop, v_Ti){
   
   # Arguments:
   # pop: A data frame representing the entire population with individual's current health states and other relevant information.
-  # v_TS: A vector representing time since onset of illness for each individual in 'pop'.
+  # v_Ti: A vector representing time since onset of illness for each individual in 'pop'.
   # Returns:
   # A modified version of the 'pop' data frame with updated states for detected individuals, especially indicating those under quarantine.
   
   # Detect individuals infected for 9 days
-  detected_individuals = (v_TS == t_detect) & pop$state == "I"  # we dont' need pop$t_detect
+  detected_individuals = (v_Ti == t_detect) & pop$state == "I"  # we dont' need pop$t_detect
   
   # if the state is I, and the time is 9 
   
@@ -449,14 +475,14 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
   
   # Initialization of matrices to store:
   # m_M: health state information over time for every individual.
-  # m_Ts: track the number of days since an individual got infected.
+  # m_Ti: track the number of days since an individual got infected.
   # m_exposure: track exposure levels for individuals.
   # Each matrix has rows corresponding to individuals and columns corresponding to days.
   
   m_M <- matrix(nrow = n_i, ncol = n_cycles + 1, 
                 dimnames = list(paste("ind", 1:n_i, sep = " "), 
                                 paste("cycle", 0:n_cycles, sep = " "))) 
-  m_Ts <- matrix(nrow = n_i, ncol = n_cycles + 1, 
+  m_Ti <- matrix(nrow = n_i, ncol = n_cycles + 1, 
                   dimnames = list(paste("ind", 1:n_i, sep = " "), 
                                   paste("cycle", 0:n_cycles, sep = " ")))
   m_exposure <- matrix(nrow = n_i, ncol = n_cycles, 
@@ -465,9 +491,9 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
 
   # Set initial health state and time since illness onset for each individual.
   m_M[, 1] <- df_X$state
-  m_Ts[,1] <- df_X$v_Ts
+  m_Ti[,1] <- df_X$v_Ti
   
-  v_Ts <- df_X$v_Ts    
+  v_Ti <- df_X$v_Ti    
   v_inf <- rep(0, n_i)
 
   # Initialize vectors to store daily counts of total infections, new infections, and detected cases.
@@ -495,24 +521,24 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
     # Generate new health states based on the calculated transition probabilities.
     prob_new_state = samplev(m_P)
     df_X$state = prob_new_state
-    df_X = Detection(df_X,v_Ts)
+    df_X = Detection(df_X,v_Ti)
     prob_new_state = df_X$state
     
     # Update vectors with new infection, total infection, and detection counts.
-    v_detected_daily[t] =  sum((v_Ts == df_X$t_detect) & prob_new_state != "R")
+    v_detected_daily[t] =  sum((v_Ti == df_X$t_detect) & prob_new_state != "R")
     v_total_inf_daily[t] = sum(prob_new_state %in% all_infect_states)
-    v_new_inf_daily[t] = sum((m_M[, t] %in% sus_states   & prob_new_state %in% all_infect_states ))
+    v_new_inf_daily[t] = sum((m_M[, t] %in% sus_states  & prob_new_state %in% all_infect_states ))
 
     # Update quarantine status based on previous day's state and current state.
     df_X = Quarantine_Check(df_X,m_M[, t])
     qc_state = df_X$state
 
     # Update the time since illness onset for next day.
-    v_Ts <- if_else(qc_state %in% all_infect_states, v_Ts + 1, 0)
-    m_Ts[,t + 1] = v_Ts
+    v_Ti <- if_else(qc_state %in% all_infect_states, v_Ti + 1, 0)
+    m_Ti[,t + 1] = v_Ti
 
     # Update individuals who have reached recovery time to 'R' state.
-    v_go_to_recover <- if_else(v_Ts >= t_recover, TRUE, FALSE)
+    v_go_to_recover <- if_else(v_Ti >= t_recover, TRUE, FALSE)
     df_X$state[v_go_to_recover] = "R"
     
     # Store current state for each individual for the next day.
