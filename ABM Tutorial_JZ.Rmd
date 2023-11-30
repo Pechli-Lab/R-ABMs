@@ -286,13 +286,13 @@ Quarantine_Check <- function(df_X, M_t){
   
   
   # reset agents' quarantine clock if they are detected in quarantine.
-  df_X$t_iso[v_new_detected_in_q]  <- 1
+  df_X$t_iso[v_new_detected_in_q]    <- 1
   
   # increment one day for all others in qurantine and newly added to quarantine
   
   df_X$t_iso[v_increment]            <- df_X$t_iso[v_increment] + 1 # increment quarantine clock
-  M_t[v_new_iso & M_t == "S"]         <- "SQ"
-  M_t[v_new_iso & M_t == "I"]         <- "IQ"
+  M_t[v_new_iso & M_t == "S"]        <- "SQ"
+  M_t[v_new_iso & M_t == "I"]        <- "IQ"
   
   return (df_X, M_t) ## need to return both 
 }
