@@ -139,6 +139,8 @@ df_X <- data.frame(
 # Randomly assign initial states to agents
 df_X$state <- sample(c(rep("S", n_S), rep("I", n_I)))
 
+# M_init <- sample(c(rep("S", n_S), rep("I", n_I)))
+
 # Ensure Age variable has only  values over a predefined limit
 df_X$Age[df_X$Age < age_lim] <- age_lim # only adults
 
@@ -246,14 +248,12 @@ Quarantine_Check <- function(df_X, M_t){
   
   v_release      <- df_X$t_iso == t_iso_max 
   
-    # find susceptible people and infected people who meet quarantine time
-  
-    v_release_SQ      <- v_release & M_t == "SQ"
-    v_release_IQ      <- v_release & M_t == "IQ"
-  
   # condition 2: find people who stay in quarantine and the quarantine clock has to be incremented.
-   
-  v_in_iso <- df_X$t_iso < t_iso_max & df_X$t_iso > 0 & df_X$v_Ti != t_detect
+  ## PP comment: describe conditions similar to " if agents are already in quarantine "IQ", quarantine clock need to be reset"
+    
+  v_in_iso <- (df_X$t_iso < t_iso_max & df_X$t_iso > 0 & df_X$v_Ti != t_detect)
+  
+  # find people in quarantine exclude those need to be reset (df_X$v_Ti == t_detect & df_X$t_iso > 0)
   
   # condition 3: find newly detected people. NOTE: people enter quarantine by detection
   # if agents are already in quarantine "IQ", quarantine clock need to be reset
@@ -266,10 +266,11 @@ Quarantine_Check <- function(df_X, M_t){
   
   # find newly infected agents' dependencies in  workpalces
   
-  v_new_detected_workplace           <- unique(df_X$wid[v_new_detected_out_q]) #families have newly infected in quarantine cases
+  v_new_detected_workplace           <- unique(df_X$wid[v_new_detected_out_q]) # workplace have newly infected in quarantine cases
   v_new_iso                          <- (df_X$wid %in% v_new_detected_workplace) & M_t != "R"
   
   # find agents' quarantine clock need to be incremented
+  ## PP comments: newly detected or previously isolated, try to explain logical statements
   v_increment                        <- v_new_iso | v_in_iso
   
   # -------------------------------------
@@ -281,9 +282,12 @@ Quarantine_Check <- function(df_X, M_t){
   # - infected people will go to recovered
   
   df_X$t_iso[v_release]              <-   0
-  M_t[v_release_SQ]                  <-  "S" #when quarantine ends, state goes back to susceptible
-  M_t[v_release_IQ]                  <-  "R" #when quarantine ends, state goes back to recovered
+  M_t[v_release & M_t == "SQ"]                  <-  "S" #when quarantine ends, state goes back to susceptible
+  M_t[v_release & M_t == "IQ"]                  <-  "R" #when quarantine ends, state goes back to recovered
   
+  
+  # find susceptible people and infected people who meet quarantine time
+  ##PP comments do the same for above as   M_t[v_new_iso & M_t == "S"]        <- "SQ"
   
   # reset agents' quarantine clock if they are detected in quarantine.
   df_X$t_iso[v_new_detected_in_q]    <- 1
@@ -319,27 +323,23 @@ fun_work_exposure <- function(df_X, M_t) {
   # Step1: Initialize and filter worker population
   # -------------------------------------
  
-   
-  v_atwork <- M_t == "S" | M_t == "I"                                           # Filter workers currently at work
+  ## PP: give a more inttuitive name
+  
+  v_atwork <- df_X$t_iso == 0 #M_t == "S" | M_t == "I"  | M_t == "R"     # Filter workers currently at work df_X$t_iso == 0
   df_atwork <- df_X[v_atwork,]
   
   v_exposure <- df_X[M_t  == "S",]$n_exposure
-  v_infectious <- df_atwork$v_Ti > t_latent
+  v_infectious <- df_X[M_t == "I","v_Ti"] > t_latent
   v_interact_wid <- df_atwork$wid
   
-  v_exposure <- df_X[M_t  == "S",]$n_exposure
-  v_pid_S    <-    df_X$pid[M_t == "S"]
+  v_pid_S    <-    df_X[M_t == "S","pid"]
   
  
   # -------------------------------------
   # Step2: Build the workplace table
   # -------------------------------------
-  df_tbl_workplace <- data.frame(table(v_interact_wid))
   
-  names(df_tbl_workplace) <- c("wid", "wsize")
-  
-  
-  df_infectious <- df_atwork[v_infectious,]                                       # Filter infectious workers
+  df_infectious <- df_atwork[v_infectious,]                                        # Filter infectious workers
   v_inf_workplace <- df_infectious$wid                                             # List of workplaces with infectious workers
     
     # Check if there are infectious workers present
