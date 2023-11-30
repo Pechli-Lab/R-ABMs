@@ -191,15 +191,17 @@ df_X$n_contact           <- sapply(n_worksize,
 The `Probs` function updates the transition probabilities of every cycle is shown below.
 
 ```{r}
-Probs <- function(df_X) { 
+ #M_t                    <- df_X$state     
+Probs <- function(df_X, M_t) { 
   # Arguments:
   # df_X: data frame with individual characteristics data 
+  # M_t:  health state occupied at cycle t (character variable)
   # Returns: 
   # transition probabilities for that cycle
   
   # create matrix of state transition probabilities
   m_p_t                  <- matrix(0, nrow = n_states, ncol = n_i)
-  M_t                    <- df_X$state                    # M_t:  health state occupied at cycle t (character variable)
+               
   # give the state names to the rows
   rownames(m_p_t)        <- v_names_states                         
   
@@ -227,12 +229,10 @@ Probs <- function(df_X) {
 
 ```{r}
 
-#make pop the only people in quarantine SQ + IQ
-
 #Quarantine_Check can update the quarantine clock at current time cycle
-Quarantine_Check <- function(df_X){
+Quarantine_Check <- function(df_X, M_t){
   # Arguments:
-  # pop: population dataframe of current time cycle t
+  # df_X: population dataframe of current time cycle t
   # M_t: states at current cycle t
   # Returns: 
   # new population dataframe with updated states
@@ -241,95 +241,60 @@ Quarantine_Check <- function(df_X){
   # Step1: find people in different quarantine conditions
   # -------------------------------------
   
-  # People in quarantine:
-  
-  # we dont have people infetect in quarantine
-  # 
-  
-  # # condition 1: reset quarantine clock for those who become infected or have close contact with infected people during quarantine
-  # new_infected_in_Q          = which(pop$state %in% infect_states_iso & pre_state == "SQ") #got infected in quarantine
-  # 
-  # reset_workplace            = unique(pop$wid[new_infected_in_Q])
-  # reset_people               = pop$wid %in% reset_workplace #find all the people who had expose in workplace quarantine
-  # 
-  
-  
-  
-  # condition 2: find people are going to be released from quarantine
+  # condition 1: find people are going to be released from quarantine
   # check if quarantine clock hit t_iso_max
   
   v_release      <- df_X$t_iso == t_iso_max 
   
-  #find susceptible people and infected people who meet quarantine time
-
-  v_release_SQ     <- v_release_S & df_X == "SQ"
-  v_release_IQ     <- v_release_I & df_X == "IQ"
-    
-  # condition 3: find people who stay in quarantine and the quarantine clock has to be incremented.
+    # find susceptible people and infected people who meet quarantine time
   
+    v_release_SQ      <- v_release & M_t == "SQ"
+    v_release_IQ      <- v_release & M_t == "IQ"
+  
+  # condition 2: find people who stay in quarantine and the quarantine clock has to be incremented.
    
-  v_in_iso <- df_X$t_iso < t_iso_max & df_X$t_iso > 0
+  v_in_iso <- df_X$t_iso < t_iso_max & df_X$t_iso > 0 & df_X$v_Ti != t_detect
   
+  # condition 3: find newly detected people. NOTE: people enter quarantine by detection
+  # if agents are already in quarantine "IQ", quarantine clock need to be reset
   
-  # condition 4: find newly infected people entering quarantine NOTE: people enter quarantine by detection
-  v_new_detected                <-  which(df_X$v_Ti == t_detect ) #new infected generated from infected
+  v_new_detected_in_q                <-  df_X$v_Ti == t_detect & df_X$t_iso > 0
   
-  # condition t_iso_max: find newly infected people's dependencies in families and workpalces
-  v_new_detected_workplace     = unique(df_X$wid[v_new_detected]) #families have newly infected in quarantine cases
+  # if agents are in I state "I" and meet the t_detect, all coworkers (except recovered) will be put into quarantine.
   
-  v_new_iso    <- (df_X$wid %in% v_new_detected_workplace & df_X$state != "R") #
+  v_new_detected_out_q               <-  df_X$v_Ti == t_detect & df_X$t_iso == 0
   
-  v_increment <- v_new_iso | v_in_iso
+  # find newly infected agents' dependencies in  workpalces
   
-  df_X$t_iso[v_increment] <- df_X$t_iso[v_increment] + 1
+  v_new_detected_workplace           <- unique(df_X$wid[v_new_detected_out_q]) #families have newly infected in quarantine cases
+  v_new_iso                          <- (df_X$wid %in% v_new_detected_workplace) & M_t != "R"
   
-  df_X$state[v_new_iso] <-  paste(pop$state[v_new_iso],"Q",sep = "")
+  # find agents' quarantine clock need to be incremented
+  v_increment                        <- v_new_iso | v_in_iso
   
-  # release people with meet t_iso_max-days quarantine requirement
-  # - isolated susceptible people will go to susceptible
-  # - infected people will go to recovered
-  df_X$t_iso[v_release]           <-   0
-  df_X$state[v_release_SQ]        <-  "S" #when quarantine ends, state goes back to susceptible
-  df_X$state[v_release_IQ]        <-  "R" #when quarantine ends, state goes back to recovered
-  
-  
-  
-  
-  
-  
-  
-  #new_infected_work= unique(pop$wid[new_infected]) #workplaces have newly infected in quarantine cases #comment out if same workplace contact don't need to be put in quarantine
-  
-  people whose quarantine clocks have to be set to 1 including
-  exist_quarantine <- df_X$t_iso  >0 & df_X$t_iso < t_iso_max
-  pop$t_iso[new_qurantine]          = pop$t_iso[new_qurantine] + 1
-  pop$t_iso[exist_qurantine]        = pop$t_iso[new_qurantine] + 1
-    # -------------------------------------
+  # -------------------------------------
   # Step2: Update quarantine clock
   # -------------------------------------
   
-  # set new_quarantine clock to 1 
-  pop$t_iso[new_qurantine]    = 1
-  pop$state[new_qurantine_add] = paste(pop$state[new_qurantine_add],"Q",sep = "") # update quarantine states
-  pop$time[new_qurantine]     = pop$time[new_qurantine]+1.                        # increment total quarantine time
-  
-  
   # release people with meet t_iso_max-days quarantine requirement
   # - isolated susceptible people will go to susceptible
   # - infected people will go to recovered
-  pop$t_iso[full_q]           =  0
-  pop$state[sus_full_q]       = "S" #when quarantine ends, state goes back to susceptible
-  pop$state[inf_full_q]       = "R" #when quarantine ends, state goes back to recovered
   
-  #increment quarantine clock and total quarantine time for everyone else in quarantine
-  pop$t_iso[else_q]           = pop$t_iso[else_q] + 1
-  pop$time[else_q]            = pop$time[else_q] + 1
-  
-  M_t[df_X$v_Ti == t_detect  & M_t =="I" ] <- "IQ"
-  M_t[df_X$v_Ti == t_detect  & M_t =="IQ" ] <- "IQ"
+  df_X$t_iso[v_release]              <-   0
+  M_t[v_release_SQ]                  <-  "S" #when quarantine ends, state goes back to susceptible
+  M_t[v_release_IQ]                  <-  "R" #when quarantine ends, state goes back to recovered
   
   
-  return (df_X)
+  # reset agents' quarantine clock if they are detected in quarantine.
+  df_X$t_iso[v_new_detected_in_q]  <- 1
+  
+  # increment one day for all others in qurantine and newly added to quarantine
+  
+  df_X$t_iso[v_increment]            <- df_X$t_iso[v_increment] + 1 # increment quarantine clock
+  M_t[v_new_iso & M_t == "S"]         <- "SQ"
+  M_t[v_new_iso & M_t == "I"]         <- "IQ"
+  
+  return (df_X, M_t) ## need to return both 
 }
 
 ```
@@ -339,119 +304,102 @@ Quarantine_Check <- function(df_X){
 ```{r}
 
 # Exposure_Check calculates the exposure of workers at their workplace
-fun_work_exposure <- function(pop) {
+fun_work_exposure <- function(df_X, M_t) {
   
   # Arguments:
-  # pop: A data frame representing the entire population. It should contain columns such as 'atwork', 'expl', 
-  #      'state', 'wid', 'pid', and others that are relevant to the exposure at work.
+  # df_X: population dataframe of current time cycle t
+  # M_t: states at current cycle t
+  
   # Returns:
-  # A modified version of the 'pop' data frame with updated exposure levels ('expl') and possibly other columns 
+  # A modified version of the 'df_X' data frame with updated exposure levels ('expl') and possibly other columns 
   # based on interactions at the workplace.
 
   
   # -------------------------------------
   # Step1: Initialize and filter worker population
   # -------------------------------------
-  allpop <- pop                                                                 # Extract entire population data
-  worker_list <- pop[pop$atwork == 1,]                                          # Filter workers currently at work
+ 
+   
+  v_atwork <- M_t == "S" | M_t == "I"                                           # Filter workers currently at work
+  df_atwork <- df_X[v_atwork,]
   
-  # Check if there are workers present
-  if (sum(pop$atwork == 1) > 0) {
-    select_pop <- allpop[pop$atwork == 1,]
-    expl_list <- select_pop$n_exposure
-    infectious <- select_pop$state %in% infect_states                           # Identify infectious individuals
-    wid_list <- select_pop$wid                                                  # List of workplace IDs
-    out_of_iso <- select_pop$state %!in% iso_states                             # Workers out of isolation
-    pid_list <- select_pop$pid[out_of_iso & select_pop$state == "S"]          # Susceptible workers out of isolation
-    
-    # -------------------------------------
-    # Step2: Build the workplace table
-    # -------------------------------------
-    workplacetable <- data.frame(table(wid_list[select_pop$atwork == 1]))
-    names(workplacetable) <- c("wid", "wsize")
-    
-    inf_worker <- select_pop[infectious,]                                       # Filter infectious workers
-    inf_workplace <- inf_worker$wid                                             # List of workplaces with infectious workers
+  v_exposure <- df_X[M_t  == "S",]$n_exposure
+  v_infectious <- df_atwork$v_Ti > t_latent
+  v_interact_wid <- df_atwork$wid
+  
+  v_exposure <- df_X[M_t  == "S",]$n_exposure
+  v_pid_S    <-    df_X$pid[M_t == "S"]
+  
+ 
+  # -------------------------------------
+  # Step2: Build the workplace table
+  # -------------------------------------
+  df_tbl_workplace <- data.frame(table(v_interact_wid))
+  
+  names(df_tbl_workplace) <- c("wid", "wsize")
+  
+  
+  df_infectious <- df_atwork[v_infectious,]                                       # Filter infectious workers
+  v_inf_workplace <- df_infectious$wid                                             # List of workplaces with infectious workers
     
     # Check if there are infectious workers present
-    if (nrow(inf_worker) > 0) {
-      contact <- c()
+    if (nrow(df_infectious) > 0) {
+      v_contact <- c()
       
       # -------------------------------------
       # Step3: Identify contacts for infectious workers
       # -------------------------------------
-      for (i in 1:nrow(inf_worker)) {
-        select_worker <- inf_worker[i,]
-        workplacepid <- select_pop[select_pop$wid == select_worker$wid,]$pid  # Fetch workers at the same workplace
-        to_contact <- workplacepid[!workplacepid %in% select_worker$pid]     # Exclude the current worker
+      
+      for (i in 1:nrow(df_infectious)) {
+        inf_worker_select  <- inf_worker[i,]
+        
+        v_pid_select <- df_atwork[df_atwork$wid == inf_worker_select$wid,]$pid   # Fetch workers at the same workplace
+        v_to_contact <- v_pid_select[-inf_worker_select$pid]                       # Exclude the current worker
         
         # Determine contacts based on the contact number
-        if (length(to_contact) > 1) {
-          new_contact <- sample(to_contact, min(length(to_contact), select_worker$n_contact))
-          contact <- c(contact, new_contact)
+        if (length(v_to_contact) > 1) {
+          new_contact <- sample(v_to_contact, min(length(v_to_contact), inf_worker_select$n_contact))
+          v_contact <- c(v_contact, new_contact)
         } else if (length(to_contact) == 1) {
-          contact <- c(contact, to_contact)
+          v_contact <- c(v_contact, to_contact)
         }
       }
+  
       
       # -------------------------------------
       # Step4: Build the contact table
       # -------------------------------------
-      if (length(contact) != 0) {
-        contact_table <- data.frame(table(contact))
-        names(contact_table) <- c("pid", "expl")
+      if (length(v_contact) != 0) {
+        df_contact_table <- data.frame(table(v_contact))
+        names(df_contact_table) <- c("pid", "n_exposure")
         
         # Convert to numeric types
-        contact_table$pid <- as.numeric(as.character(contact_table$pid))
-        contact_table$n_exposure <- as.numeric(as.character(contact_table$n_exposure))
+        df_contact_table$pid <- as.numeric(as.character(df_contact_table$pid))
+        df_contact_table$n_exposure <- as.numeric(as.character(df_contact_table$n_exposure))
         
         # Update exposure levels
-        expl_list[select_pop$pid %in% contact_table$pid] <- expl_list[select_pop$pid %in% contact_table$pid] + contact_table$n_exposure
-        allpop[allpop$pid %in% contact_table$pid,]$contact_type <- 3
+        v_exposure[df_atwork$pid %in% df_contact_table$pid] <- v_exposure[df_atwork$pid %in% df_contact_table$pid] + contact_table$n_exposure
       }
     }
     
     # Update the main population dataset
-    allpop[pop$atwork == 1,]$n_exposure <- expl_list
+    df_X[v_atwork,]$n_exposure <- v_exposure
   }
   
-  return(allpop)
+  return(df_X)
 }
 
+      
+      
+      
+      
+      
+      
+  
 
 
 ```
 
-## 05.4 Detection function
-
-The `Detection` function detec infected people
-
-```{r}
-Detection <- function(pop, v_Ti){
-  
-  # Arguments:
-  # pop: A data frame representing the entire population with individual's current health states and other relevant information.
-  # v_Ti: A vector representing time since onset of illness for each individual in 'pop'.
-  # Returns:
-  # A modified version of the 'pop' data frame with updated states for detected individuals, especially indicating those under quarantine.
-  
-  # Detect individuals infected for 9 days
-  detected_individuals = (v_Ti == t_detect) & pop$state == "I"  # we dont' need pop$t_detect
-  
-  # if the state is I, and the time is 9 
-  
-  # Update state of newly detected individuals not in isolation states to include quarantine ("Q")
-  new_iso = detected_individuals & pop$state %!in% iso_states
-  pop$state[new_iso] = paste(pop$state[new_iso], "Q", sep = "") #  IQ is infected 
-  
-
-  
-  return(pop)
-}
-
-
-
-```
 
 
 ## 05.5 Microsimulation function
