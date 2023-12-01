@@ -137,9 +137,7 @@ df_X <- data.frame(
 
 
 # Randomly assign initial states to agents
-df_X$state <- sample(c(rep("S", n_S), rep("I", n_I)))
-
-# M_init <- sample(c(rep("S", n_S), rep("I", n_I)))
+M_init <- sample(c(rep("S", n_S), rep("I", n_I)))
 
 # Ensure Age variable has only  values over a predefined limit
 df_X$Age[df_X$Age < age_lim] <- age_lim # only adults
@@ -174,7 +172,7 @@ df_X <- df_X %>%
   mutate(
     n_exposure <-  0,                                     # Exposure level
     n_contact <-  0,                                      # Number of contacts in a day
-    v_Ti <-  0,                                           # Time since being infected
+    t_infected <-  0,                                           # Time since being infected
     t_iso = 0                                             # Quarantine time clock
   )
 
@@ -193,7 +191,6 @@ df_X$n_contact           <- sapply(n_worksize,
 The `Probs` function updates the transition probabilities of every cycle is shown below.
 
 ```{r}
- #M_t                    <- df_X$state     
 Probs <- function(df_X, M_t) { 
   # Arguments:
   # df_X: data frame with individual characteristics data 
@@ -232,7 +229,7 @@ Probs <- function(df_X, M_t) {
 ```{r}
 
 #Quarantine_Check can update the quarantine clock at current time cycle
-Quarantine_Check <- function(df_X, M_t){
+fun_Quarantine_Check <- function(df_X, M_t){
   # Arguments:
   # df_X: population dataframe of current time cycle t
   # M_t: states at current cycle t
@@ -251,18 +248,18 @@ Quarantine_Check <- function(df_X, M_t){
   # condition 2: find people who stay in quarantine and the quarantine clock has to be incremented.
   ## PP comment: describe conditions similar to " if agents are already in quarantine "IQ", quarantine clock need to be reset"
     
-  v_in_iso <- (df_X$t_iso < t_iso_max & df_X$t_iso > 0 & df_X$v_Ti != t_detect)
+  v_in_iso <- (df_X$t_iso < t_iso_max & df_X$t_iso > 0 & df_X$t_infected != t_detect)
   
-  # find people in quarantine exclude those need to be reset (df_X$v_Ti == t_detect & df_X$t_iso > 0)
+  # find people in quarantine exclude those need to be reset (df_X$t_infected == t_detect & df_X$t_iso > 0)
   
   # condition 3: find newly detected people. NOTE: people enter quarantine by detection
   # if agents are already in quarantine "IQ", quarantine clock need to be reset
   
-  v_new_detected_in_q                <-  df_X$v_Ti == t_detect & df_X$t_iso > 0
+  v_new_detected_in_q                <-  df_X$t_infected == t_detect & df_X$t_iso > 0
   
   # if agents are in I state "I" and meet the t_detect, all coworkers (except recovered) will be put into quarantine.
   
-  v_new_detected_out_q               <-  df_X$v_Ti == t_detect & df_X$t_iso == 0
+  v_new_detected_out_q               <-  df_X$t_infected == t_detect & df_X$t_iso == 0
   
   # find newly infected agents' dependencies in  workpalces
   
@@ -298,7 +295,7 @@ Quarantine_Check <- function(df_X, M_t){
   M_t[v_new_iso & M_t == "S"]        <- "SQ"
   M_t[v_new_iso & M_t == "I"]        <- "IQ"
   
-  return (df_X, M_t) ## need to return both 
+  return(list(df_X = df_X,M_t =  M_t)) 
 }
 
 ```
@@ -315,32 +312,30 @@ fun_work_exposure <- function(df_X, M_t) {
   # M_t: states at current cycle t
   
   # Returns:
-  # A modified version of the 'df_X' data frame with updated exposure levels ('expl') and possibly other columns 
+  # A modified version of the 'df_X' data frame with updated exposure levels ('n_exposure') and possibly other columns 
   # based on interactions at the workplace.
 
-  
   # -------------------------------------
-  # Step1: Initialize and filter worker population
+  # Step1: Initialize and filter worker 
   # -------------------------------------
  
-  ## PP: give a more inttuitive name
+  v_agents_atwork <- df_X$t_iso == 0   # Filter workers currently at work "S","I","R"
   
-  v_atwork <- df_X$t_iso == 0 #M_t == "S" | M_t == "I"  | M_t == "R"     # Filter workers currently at work df_X$t_iso == 0
-  df_atwork <- df_X[v_atwork,]
+  df_atwork <- df_X[v_agents_atwork,] # subset of agents, who participate interaction: at work COVID exposure
   
-  v_exposure <- df_X[M_t  == "S",]$n_exposure
-  v_infectious <- df_X[M_t == "I","v_Ti"] > t_latent
+  v_n_exposure <- df_atwork[M_t  == "S",]$n_exposure # vector of number of expousre in current cycle
+  v_infectious <- df_atwork$t_infected > t_latent # vector of infectious agents in at work subset df.
+  
   v_interact_wid <- df_atwork$wid
-  
   v_pid_S    <-    df_X[M_t == "S","pid"]
   
- 
+  
   # -------------------------------------
   # Step2: Build the workplace table
   # -------------------------------------
   
   df_infectious <- df_atwork[v_infectious,]                                        # Filter infectious workers
-  v_inf_workplace <- df_infectious$wid                                             # List of workplaces with infectious workers
+  v_inf_workplace <- df_atwork[v_infectious, "wid"]                                # List of workplaces with infectious workers
     
     # Check if there are infectious workers present
     if (nrow(df_infectious) > 0) {
@@ -439,9 +434,9 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
 
   # Set initial health state and time since illness onset for each individual.
   m_M[, 1] <- df_X$state
-  m_Ti[,1] <- df_X$v_Ti
+  m_Ti[,1] <- df_X$t_infected
   
-  v_Ti <- df_X$v_Ti    
+  t_infected <- df_X$t_infected    
   v_inf <- rep(0, n_i)
 
   # Initialize vectors to store daily counts of total infections, new infections, and detected cases.
@@ -469,11 +464,11 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
     # Generate new health states based on the calculated transition probabilities.
     prob_new_state = samplev(m_P)
     df_X$state = prob_new_state
-    df_X = Detection(df_X,v_Ti)
+    df_X = Detection(df_X,t_infected)
     prob_new_state = df_X$state
     
     # Update vectors with new infection, total infection, and detection counts.
-    v_detected_daily[t] =  sum((v_Ti == df_X$t_detect) & prob_new_state != "R")
+    v_detected_daily[t] =  sum((t_infected == df_X$t_detect) & prob_new_state != "R")
     v_total_inf_daily[t] = sum(prob_new_state %in% all_infect_states)
     v_new_inf_daily[t] = sum((m_M[, t] %in% sus_states  & prob_new_state %in% all_infect_states ))
 
@@ -482,11 +477,11 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
     qc_state = df_X$state
 
     # Update the time since illness onset for next day.
-    v_Ti <- if_else(qc_state %in% all_infect_states, v_Ti + 1, 0)
-    m_Ti[,t + 1] = v_Ti
+    t_infected <- if_else(qc_state %in% all_infect_states, t_infected + 1, 0)
+    m_Ti[,t + 1] = t_infected
 
     # Update individuals who have reached recovery time to 'R' state.
-    v_go_to_recover <- if_else(v_Ti >= t_recover, TRUE, FALSE)
+    v_go_to_recover <- if_else(t_infected >= t_recover, TRUE, FALSE)
     df_X$state[v_go_to_recover] = "R"
     
     # Store current state for each individual for the next day.
