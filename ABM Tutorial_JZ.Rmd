@@ -236,8 +236,8 @@ fun_Probs <- function(df_X, M_t) {
 fun_Quarantine_Check <- function(df_X, M_t){
   
   # Arguments:
-  # df_X: Data frame representing the population at the current time cycle t.
-  # M_t: Vector representing the states of individuals at the current cycle t.
+  # df_X: Data frame containing individual characteristics data.
+  # M_t: Vector representing the health states of individuals at cycle t (character variable).
   
   # Returns: 
   # A list containing the updated population data frame (df_X) and state vector (M_t).
@@ -303,8 +303,8 @@ fun_Quarantine_Check <- function(df_X, M_t){
 fun_work_exposure <- function(df_X, M_t) {
   
   # Arguments:
-  # df_X: Data frame representing the population at the current time cycle t.
-  # M_t: States at the current cycle t.
+  # df_X: Data frame containing individual characteristics data.
+  # M_t: Vector representing the health states of individuals at cycle t (character variable).
   
   # Returns:
   # A modified version of the 'df_X' data frame with updated exposure levels ('n_exposure') and possibly other columns 
