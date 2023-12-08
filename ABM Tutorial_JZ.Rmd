@@ -214,14 +214,20 @@ fun_Probs <- function(df_X, M_t) {
   
   # The probability of susceptible individuals becoming infected
   # This is calculated as 1 minus the probability of staying safe all day (considering both community and workplace transmission)
-  p_Sus_Inf              <- (1 - ((1 - p_TransmitCommunity) * (1 - p_infect_prob)))         
+  p_Sus_Inf              <- (1 - ((1 - p_TransmitCommunity) * (1 - p_infect_prob)))      
 
   # Update the transition matrix with probabilities
   
-  m_p_t["S", M_t == "S"] <- 1 - p_Sus_Inf     # Probability for susceptible individuals to stay in the susceptible state (S) 
-  m_p_t["I", M_t == "S"] <- p_Sus_Inf         # Probability for susceptible individuals to transition from susceptible (S) to infected (I)
+  m_p_t["S",  M_t == "S" ] <- 1 - p_Sus_Inf     # Probability for susceptible individuals to stay in the susceptible state (S) 
+  m_p_t["I",  M_t == "S" ] <- p_Sus_Inf         # Probability for susceptible individuals to transition from susceptible (S) to infected (I)
   
-  return(m_p_t)
+  # Probabilities are set to 1 for all other deterministic state transitions:
+  m_p_t["I",  M_t == "I" ] <- 1
+  m_p_t["SQ", M_t == "SQ"] <- 1 
+  m_p_t["IQ", M_t == "IQ"] <- 1 
+  m_p_t["R",  M_t == "R" ] <- 1 
+  
+  return(t(m_p_t))
 }
 
 
@@ -332,7 +338,7 @@ fun_work_exposure <- function(df_X, M_t) {
     # List workplaces with infectious workers
     v_inf_workplace      <- df_infectious$wid    
     v_wid_atwork         <- df_atwork$wid
-    v_pid_atwork.        <- df_atwork$pid
+    v_pid_atwork         <- df_atwork$pid
  
     # -------------------------------------
     # Step3: Identify contacts for infectious workers
@@ -392,14 +398,17 @@ fun_work_exposure <- function(df_X, M_t) {
 Below we develop the microsimulation function that allows the model to be run.
 
 ```{r}
+## JZ: do we need to add M_init as input or make it a global variable?
+
 # `MicroSim` is a microsimulation function to model individual-level disease progression and transmission.
-MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
+MicroSim <- function(df_X, M_init, seed = 1, n_cycles = 10) {
   
   # Arguments:  
   # df_X: A data frame containing individual-level data.
+  # M_init: Initial health states.
   # seed: Seed for the random number generator; default is 1.
   # n_cycles: Number of cycles or iterations to simulate; default is 10.
-
+  
   # Ensures reproducibility of results.
   set.seed(seed)
 
@@ -409,25 +418,15 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
   # Initialization of matrices to store:
   # m_M: health state information over time for every individual.
   # m_Ti: track the number of days since an individual got infected.
-  # m_exposure: track exposure levels for individuals.
+
   # Each matrix has rows corresponding to individuals and columns corresponding to days.
   
   m_M <- matrix(nrow = n_i, ncol = n_cycles + 1, 
                 dimnames = list(paste("ind", 1:n_i, sep = " "), 
                                 paste("cycle", 0:n_cycles, sep = " "))) 
-  m_Ti <- matrix(nrow = n_i, ncol = n_cycles + 1, 
-                  dimnames = list(paste("ind", 1:n_i, sep = " "), 
-                                  paste("cycle", 0:n_cycles, sep = " ")))
-  m_exposure <- matrix(nrow = n_i, ncol = n_cycles, 
-                   dimnames = list(paste("ind", 1:n_i, sep = " "), 
-                                   paste("cycle", 1:n_cycles, sep = " ")))
-
-  # Set initial health state and time since illness onset for each individual.
-  m_M[, 1] <- df_X$state
-  m_Ti[,1] <- df_X$t_infected
   
-  t_infected <- df_X$t_infected    
-  v_inf <- rep(0, n_i)
+  # Set initial health state and time since illness onset for each individual.
+  m_M[, 1] <- M_init
 
   # Initialize vectors to store daily counts of total infections, new infections, and detected cases.
   v_total_inf_daily <- rep(0,n_cycles)
@@ -441,41 +440,30 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
     df_X$n_exposure = 0
 
     # Calculate exposure at work for each individual.
-    df_X <- work_exposure(df_X)
-    m_exposure[,t] <- df_X$n_exposure
+    df_X <- fun_work_exposure(df_X,m_M[, t])
     
     # Calculate transition probabilities based on current health state and exposure.
-    m_P <- Probs(df_X)
-
+    m_P <- fun_Probs(df_X,m_M[, t])
+    
     # Validate transition probabilities.
     check_transition_probability(m_P, verbose = TRUE)
     check_sum_of_transition_array(m_P, n_rows = n_i, n_cycles = n_cycles, verbose = TRUE)
     
     # Generate new health states based on the calculated transition probabilities.
-    prob_new_state = samplev(m_P)
-    df_X$state = prob_new_state
-    df_X = Detection(df_X,t_infected)
-    prob_new_state = df_X$state
+    m_M[, t+1] = samplev(m_P)
     
     # Update vectors with new infection, total infection, and detection counts.
-    v_detected_daily[t] =  sum((t_infected == df_X$t_detect) & prob_new_state != "R")
-    v_total_inf_daily[t] = sum(prob_new_state %in% all_infect_states)
-    v_new_inf_daily[t] = sum((m_M[, t] %in% sus_states  & prob_new_state %in% all_infect_states ))
-
+    v_detected_daily[t] =  sum(df_X$t_infected == t_detect)
+    v_total_inf_daily[t] = sum(m_M[, t+1]== "I" | m_M[, t+1] == "IQ")
+    v_new_inf_daily[t] = sum((m_M[, t] == "I" & m_M[, t+1] == "Q" ))
+    
     # Update quarantine status based on previous day's state and current state.
-    df_X = Quarantine_Check(df_X,m_M[, t])
-    qc_state = df_X$state
+    list_quarantine = fun_Quarantine_Check(df_X,m_M[, t+1])
+    df_X = list_quarantine$df_X # Update quarantine clock t_iso
+    m_M[, t+1] = list_quarantine$M_t #Update health state by deterministic state transitions
 
     # Update the time since illness onset for next day.
-    t_infected <- if_else(qc_state %in% all_infect_states, t_infected + 1, 0)
-    m_Ti[,t + 1] = t_infected
-
-    # Update individuals who have reached recovery time to 'R' state.
-    v_go_to_recover <- if_else(t_infected >= t_recover, TRUE, FALSE)
-    df_X$state[v_go_to_recover] = "R"
-    
-    # Store current state for each individual for the next day.
-    m_M[, t + 1] <- df_X$state
+    df_X$t_infected<- if_else(m_M[, t+1] == "I" | m_M[, t+1] == "IQ", df_X$t_infected + 1, 0)
 
     # Display simulation progress at every 10% completion.
     if(t/(n_cycles/10) == round(t/(n_cycles/10), 0)) {
@@ -484,7 +472,7 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
   }
 
   # Store results from the simulation in a list.
-  results <- list(m_M = m_M, pop = df_X, v_new_inf_daily = v_new_inf_daily, 
+  results <- list(m_M = m_M, df_X = df_X, v_new_inf_daily = v_new_inf_daily, 
                   v_total_inf_daily = v_total_inf_daily, v_detected_daily = v_detected_daily)
 
   # Return the results.
@@ -500,7 +488,7 @@ MicroSim <- function(df_X, seed = 1, n_cycles = 10) {
 # 06 Run Microsimulation
 # By specifying all the arguments in the `MicroSim()` the simulation can be started
 # Run the simulation model
-outcomes <- MicroSim(df_X = df_X, seed = 1,n_cycles = n_cycles)
+outcomes <- MicroSim(df_X = df_X, M_init = M_init, seed = 1,n_cycles = n_cycles)
 ```
 
 # 07 Visualize results to be updated
