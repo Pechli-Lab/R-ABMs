@@ -417,9 +417,7 @@ MicroSim <- function(df_X, M_init, seed = 1, n_cycles = 10) {
   
   # Initialization of matrices to store:
   # m_M: health state information over time for every individual.
-  # m_Ti: track the number of days since an individual got infected.
-
-  # Each matrix has rows corresponding to individuals and columns corresponding to days.
+  # The matrix has rows corresponding to individuals and columns corresponding to days.
   
   m_M <- matrix(nrow = n_i, ncol = n_cycles + 1, 
                 dimnames = list(paste("ind", 1:n_i, sep = " "), 
