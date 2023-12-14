@@ -453,8 +453,8 @@ MicroSim <- function(df_X, M_init, seed = 1, n_cycles = 10) {
     # Update vectors with new infection, total infection, and detection counts.
     v_detected_daily[t] =  sum(df_X$t_infected == t_detect)
     v_total_inf_daily[t] = sum(m_M[, t+1]== "I" | m_M[, t+1] == "IQ")
-    v_new_inf_daily[t] = sum((m_M[, t] == "I" & m_M[, t+1] == "Q" ))
-    
+    v_new_inf_daily[t] = sum((m_M[, t] == "S" & m_M[, t+1] == "I" ))
+
     # Update quarantine status based on previous day's state and current state.
     list_quarantine = fun_Quarantine_Check(df_X,m_M[, t+1])
     df_X = list_quarantine$df_X # Update quarantine clock t_iso
