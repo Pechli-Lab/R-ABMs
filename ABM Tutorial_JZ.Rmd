@@ -103,7 +103,6 @@ n_S                      <- round((1 - p_seed_ratio)
                                      * n_i)             # number of initialized susceptible agents
 n_I                      <- n_i - n_S                   # number of initialized infected agents
 
-
 # workplace characteristics 
 v_workplace_size         <- c(5, 6, 7)                  # we assume workplaces with sizes of 5 to 7 people
 
@@ -118,10 +117,10 @@ v_workplace_size         <- c(5, 6, 7)                  # we assume workplaces w
 ```{r}
 # Initialize a population dataframe for an agent-based model
 
-age_mean                 <- 40
-age_sd                   <- 10
-p_male                   <- 0.5
-age_lim                  <- 18
+age_mean                 <- 40                          # Mean age 
+age_sd                   <- 10                          # Standard deviation of age
+p_male                   <- 0.5                         # Proportion of male
+age_lim                  <- 18                          # Minimum age
 
 # Create agent matrix
 df_X <- data.frame(
@@ -140,7 +139,7 @@ df_X <- data.frame(
 M_init <- sample(c(rep("S", n_S), rep("I", n_I)))
 
 # Ensure Age variable has only  values over a predefined limit
-df_X$Age[df_X$Age < age_lim] <- age_lim # only adults
+df_X$Age[df_X$Age < age_lim] <- age_lim # only adults are included in the simulation
 
 # Define workplace structure and IDs
 p_workplace_size <- v_workplace_size / sum(v_workplace_size)
@@ -176,6 +175,10 @@ df_X <- df_X %>%
     t_iso                =  0               # Quarantine time clock
   )
 
+
+# Assign days of being infected to infected agents between 1 to 9 days
+df_X$t_infected[M_init == "I"] = sample(c(1:9),n_I,replace = T)
+
 # Set the number of contacts at work based on workplace size
 n_worksize               <- as.matrix(table(v_work_id))[v_work_id]   # Calculate Workplace size
 df_X$n_worksize          <- n_worksize                               # Add Workplace size for each agent
@@ -191,11 +194,12 @@ df_X$n_contact           <- sapply(n_worksize,
 The `fun_Probs` function updates the transition probabilities of every cycle is shown below.
 
 ```{r}
-fun_Probs <- function(df_X, M_t) { 
+fun_Probs <- function(df_X, M_t, n_cycles) { 
   
   # Arguments:
   # df_X: Data frame containing individual characteristics data.
   # M_t: Vector representing the health states of individuals at cycle t (character variable).
+  # n_cycles: Number of simulation cycles
   
   # Returns: 
   # A matrix of state transition probabilities for that cycle.
@@ -226,6 +230,10 @@ fun_Probs <- function(df_X, M_t) {
   m_p_t["SQ", M_t == "SQ"] <- 1 
   m_p_t["IQ", M_t == "IQ"] <- 1 
   m_p_t["R",  M_t == "R" ] <- 1 
+  
+  # Validate transition probabilities.
+  check_transition_probability(t(m_p_t), verbose = TRUE)
+  check_sum_of_transition_array(t(m_p_t), n_rows = n_i, n_cycles = n_cycles, verbose = TRUE)
   
   return(t(m_p_t))
 }
@@ -283,7 +291,7 @@ fun_Quarantine_Check <- function(df_X, M_t){
   # -------------------------------------
   
   # Release individuals from quarantine (reset quarantine clock, update states)
-  df_X$t_iso[v_release]  <- 0
+  df_X$t_iso[v_release]        <-  0  # Set the time of isolation to 0
   M_t[v_release & M_t == "SQ"] <- "S" # Susceptible individuals return to susceptible state
   M_t[v_release & M_t == "IQ"] <- "R" # Infected individuals move to recovered state
   
@@ -321,8 +329,8 @@ fun_work_exposure <- function(df_X, M_t) {
   # -------------------------------------
 
   # Filter for workers currently at work ("S", "I", "R" statuses)
-  v_agents_atwork        <- df_X$t_iso == 0   
-  # Create a subset of agents who participate in interaction at work for COVID exposure
+  v_agents_atwork        <- df_X$t_iso == 0   # if not in isolation, by default a worker
+  # Create a subset of agents at work
   df_atwork              <- df_X[v_agents_atwork,] 
   # Identify infectious agents in the at-work subset
   v_infectious           <- df_atwork$t_infected > t_latent 
@@ -345,7 +353,7 @@ fun_work_exposure <- function(df_X, M_t) {
     # -------------------------------------
 
     # Initialize contact vector
-    v_contact            <- c()
+    v_contact_pid         <- c()
   
     for (i in 1:n_infectious_t) {
       
@@ -359,29 +367,32 @@ fun_work_exposure <- function(df_X, M_t) {
       # Exclude the current worker
       v_pid_to_contact   <- v_pid_select[-inf_agent_i$pid]                       
       
-      # Determine contacts based on the number of contacts
+      # Determine contacts for each infectious agent
+      
+        # If there are more than one potential contact,
+        # sample contacts' PID (Participant ID) by infectious agents' predefined number of contacts on a day 'n_contacts'.
+        # If 'n_contacts' is greater than the potential available contacts, contact all potential contacts.
+      
       if (length(v_pid_to_contact) > 1) {
-        new_contact      <- sample(v_pid_to_contact, min(length(v_pid_to_contact), inf_agent_i$n_contact))
-        v_contact        <- c(v_contact, new_contact)
+        new_contact      <- sample(v_pid_to_contact, min(length(v_pid_to_contact), inf_agent_i$n_contact)) #sample contact for each agent
+        v_contact_pid        <- c(v_contact_pid, new_contact)
+        
+        # If only one potential contact is available, add that agent to the contact agent PID list
+        
       } else if (length(v_pid_to_contact) == 1) {
-        v_contact        <- c(v_contact, v_pid_to_contact)
+        v_contact_pid        <- c(v_contact_pid, v_pid_to_contact)
       }
     }
 
     # -------------------------------------
-    # Step4: Build the contact table
+    # Step4: Build the contact table and update number of exposures
     # -------------------------------------
-    if (length(v_contact) != 0) {
-      # Create a data frame of contacts
-      df_contact_table   <- data.frame(table(v_contact))
-      names(df_contact_table) <- c("pid", "n_exposure")
+    if (length(v_contact_pid) != 0) {
       
-      # Convert columns to numeric types
-      df_contact_table$pid <- as.numeric(as.character(df_contact_table$pid))
-      df_contact_table$n_exposure <- as.numeric(as.character(df_contact_table$n_exposure))
+      table_contact <- table(v_contact_pid)
       
-      # Update exposure levels in the original data frame
-      df_X[df_X$pid %in% df_contact_table$pid,]$n_exposure <-  df_contact_table$n_exposure
+      # Update number of exposures in the df_X data frame
+      df_X[df_X$pid %in% as.numeric(as.vector(names(table_contact))),]$n_exposure <-  as.numeric(as.vector(table_contact))
     }
   
   }
@@ -398,8 +409,6 @@ fun_work_exposure <- function(df_X, M_t) {
 Below we develop the microsimulation function that allows the model to be run.
 
 ```{r}
-## JZ: do we need to add M_init as input or make it a global variable?
-
 # `MicroSim` is a microsimulation function to model individual-level disease progression and transmission.
 MicroSim <- function(df_X, M_init, seed = 1, n_cycles = 10) {
   
@@ -441,28 +450,26 @@ MicroSim <- function(df_X, M_init, seed = 1, n_cycles = 10) {
     df_X <- fun_work_exposure(df_X,m_M[, t])
     
     # Calculate transition probabilities based on current health state and exposure.
-    m_P <- fun_Probs(df_X,m_M[, t])
-    
-    # Validate transition probabilities.
-    check_transition_probability(m_P, verbose = TRUE)
-    check_sum_of_transition_array(m_P, n_rows = n_i, n_cycles = n_cycles, verbose = TRUE)
+    m_P <- fun_Probs(df_X,m_M[, t],n_cycles)
     
     # Generate new health states based on the calculated transition probabilities.
     m_M[, t+1] = samplev(m_P)
     
-    # Update vectors with new infection, total infection, and detection counts.
+    # Update vector with new detection counts.
     v_detected_daily[t] =  sum(df_X$t_infected == t_detect)
-    v_total_inf_daily[t] = sum(m_M[, t+1]== "I" | m_M[, t+1] == "IQ")
-    v_new_inf_daily[t] = sum((m_M[, t] == "S" & m_M[, t+1] == "I" ))
-
+    
     # Update quarantine status based on previous day's state and current state.
     list_quarantine = fun_Quarantine_Check(df_X,m_M[, t+1])
     df_X = list_quarantine$df_X # Update quarantine clock t_iso
     m_M[, t+1] = list_quarantine$M_t #Update health state by deterministic state transitions
 
     # Update the time since illness onset for next day.
-    df_X$t_infected<- if_else(m_M[, t+1] == "I" | m_M[, t+1] == "IQ", df_X$t_infected + 1, 0)
-
+    df_X$t_infected    <- if_else(m_M[, t+1] == "I" | m_M[, t+1] == "IQ", df_X$t_infected + 1, 0)
+    
+    # Update vector with new infection and total infection counts.
+    v_new_inf_daily[t]   = sum(df_X$t_infected == 1) # Number of newly infected agents
+    v_total_inf_daily[t] = sum(df_X$t_infected > 0) # Number of total infected agents
+    
     # Display simulation progress at every 10% completion.
     if(t/(n_cycles/10) == round(t/(n_cycles/10), 0)) {
       cat('\r', paste(t/n_cycles * 100, "% done", sep = " "))
