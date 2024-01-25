@@ -115,7 +115,9 @@ In the section below we will be sampling the individual level characteristics fo
 
 ```{r}
 # Initialize a population dataframe for an agent-based model
-
+df_X <- data.frame(
+  pid = 1:n_i                                          # Assign individual IDs
+)
 # Randomly assign initial states to agents
 M_init <- sample(c(rep("S", n_S), rep("I", n_I)))
 # randomly assign a duration on the infected / not detected  state
@@ -213,8 +215,8 @@ Probs <- function(df_X, M_t, n_cycles) {
   m_p_t["R",  M_t == "R" ] <- 1 
   
   # Validate transition probabilities.
-  check_transition_probability(t(m_p_t), verbose = TRUE)
-  check_sum_of_transition_array(t(m_p_t), n_rows = n_i, n_cycles = n_cycles, verbose = TRUE)
+  check_transition_probability(t(m_p_t), verbose = F)
+  check_sum_of_transition_array(t(m_p_t), n_rows = n_i, n_cycles = n_cycles, verbose = F)
   
   return(t(m_p_t))
 }
@@ -386,7 +388,7 @@ fun_work_exposure <- function(df_X, M_t) {
 
 
 
-## 05.5 Microsimulation function
+## 05.5 ABM function
 
 Below we describe the ABM function that allows the model to be run.
 
@@ -469,13 +471,13 @@ ABM <- function(df_X, M_init, seed = 1, n_cycles = 10) {
 
 ```
 
-## 06 Run Microsimulation
+## 06 Run ABM
 
 ```{r, eval = TRUE, echo = TRUE, warning = FALSE, message = FALSE, results = FALSE }
-# 06 Run Microsimulation
+# 06 Run ABM
 # By specifying all the arguments in the `MicroSim()` the simulation can be started
 # Run the simulation model
-outcomes <- MicroSim(df_X = df_X, M_init = M_init, seed = 1,n_cycles = n_cycles)
+outcomes <- ABM(df_X = df_X, M_init = M_init, seed = 1,n_cycles = n_cycles)
 ```
 
 # 07 Visualize results to be updated
