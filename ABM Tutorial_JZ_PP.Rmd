@@ -54,7 +54,8 @@ fun_infect_prob <- function(p_infect, n_exposure) {
 
 
 In this basic ABM we assume that individuals can be be in one of 5 states:  1. susceptible to an infection, 2.infected and infectious but not in quarantine, 3.infected in quarantine, 4. recovered. Recovery is assumed to be a saturating state. We assumed that the quarantine period is 14 days from infection for all infected individuals. We further assumed that for the first day of the disease individuals are infectious although asymptomatic, and that as soon as there are symptoms individuals will self-quarantine. We further assumed perfect adherence to quarantine protocols. 
-We developed an agent based model where we assumed a daily cycle length. We modelled a hypothetical environment where individuals will go to work and can be infected at work and PP: is that still true?in the community but cannot infect others at home. We used the model to prospectively estimate a 60 day period. We assumed a latency of 4 days from acquiring the infection until symptom development.
+
+We developed an agent based model where we assumed a daily cycle length. We modeled a hypothetical environment where individuals will go to work and can be infected at work and in the community but cannot infect others at home. We used the model to prospectively estimate a 60 day period. We assumed a latency of 4 days from acquiring the infection until symptom development.
 
 
 
@@ -62,7 +63,7 @@ We developed an agent based model where we assumed a daily cycle length. We mode
 
 ## 03.1 Define model input parameters
 
-We ran the model for 100 days and we generate a hypothetical population of 10,000 individuals. We assume 4 days of  incubation period and another 5 days until one is detected and placed in isolation. we also further assumed that the period unctil recovery is 14 days. We further assume that 30% of the cohort starts as infected and that there is an 8% chance of infection daily and a 2% probability per interaction with an infected individual at work.
+We ran the model for 100 days and we generate a hypothetical population of 10,000 individuals. We assume 4 days of  incubation period and another 5 days until one is detected and placed in isolation. we also further assumed that the period until recovery is 14 days. We further assume that 30% of the cohort starts as infected and that there is an 8% chance of infection daily and a 2% probability per interaction with an infected individual at work.
 
 ```{r}
 ## General setups
@@ -102,7 +103,7 @@ n_S                 <- round((1 - p_seed_ratio)
 n_I                 <- n_i - n_S                   # number of initialized infected agents
 
 # workplace characteristics 
-v_workplace_size    <- c(5, 6, 7)                  # we assume workplaces with sizes of 5 to 7 people
+v_workplace_size    <- c(5, 6, 7)                  # we assume workplaces with sizes of 5 to 7 agents
 
 
 ```
@@ -123,33 +124,39 @@ M_init <- sample(c(rep("S", n_S), rep("I", n_I)))
 # randomly assign a duration on the infected / not detected  state
 t_init <- sample(c(1:t_detect), n_I, replace = T)
 
-#PP: JZ can you describe what each line does?
-# Define workplace structure and IDs
+# Define workplace structure and assign workplace IDs
+# Calculate the proportion of each workplace size to distribute workplaces evenly among agents
 p_workplace_size <- v_workplace_size / sum(v_workplace_size)
+
+# Calculate the number of workplaces based on proportions
 n_workplace      <- floor(n_i * p_workplace_size / v_workplace_size)[1]
+
+# Assign workplace IDs, ensuring a spread across the predefined workplace sizes
 v_work_id        <- c(
-                      rep(1:n_workplace,                            each = v_workplace_size[1]),
-                      rep( (n_workplace + 1)    :(n_workplace * 2), each = v_workplace_size[2]),
-                      rep( (n_workplace * 2 + 1):(n_workplace * 3), each = v_workplace_size[3])
+                      rep(1:n_workplace,                            each = v_workplace_size[1]), # workplace size 5
+                      rep( (n_workplace + 1)    :(n_workplace * 2), each = v_workplace_size[2]), # workplace size 6
+                      rep( (n_workplace * 2 + 1):(n_workplace * 3), each = v_workplace_size[3])  # workplace size 7
                     )
 
-#PP : JZ can you add more detials here?
+# Adjust for any remaining agents without a workplace due to rounding errors
 n_remain                 <- n_i - length(v_work_id)
 v_more_workid            <- c()
 wid_new                  <- max(v_work_id) + 1
 while(n_remain !=0){
+  # Determine the size of the next workplace, not exceeding the smallest defined size
   n_wid_new     <- ifelse(n_remain > min(v_workplace_size), min(v_workplace_size), n_remain)
+  # Assign new workplace IDs to the remaining agents
   v_more_workid <- c(v_more_workid, rep(wid_new, n_wid_new))
   n_remain      <- n_remain - n_wid_new
   wid_new       <- wid_new + 1
 }
 
-
+# Shuffle workplace IDs to randomize the assignment across the population
 v_work_id                <- sample(c(v_work_id,v_more_workid))
-df_X$wid                 <- v_work_id       # Workplace ID
+df_X$wid                 <- v_work_id        # Assign Workplace ID to each agent
 
 
-# Initialize other agent attributes
+# Initialize other agent attributes: exposure level, contact number, time since infection, and quarantine time
 df_X <- df_X %>%
   mutate(
     n_exposure           =  0,              # Exposure level
@@ -162,11 +169,13 @@ df_X <- df_X %>%
 # Assign days of being infected to infected agents between 1 to 9 days
 df_X$t_infected[M_init == "I"] = t_init
 
-# Set the number of contacts at work based on workplace size
+# Determine the number of contacts at work for each agent based on their workplace size
 n_worksize               <- as.matrix(table(v_work_id))[v_work_id]   # Calculate Workplace size
 df_X$n_worksize          <- n_worksize                               # Add Workplace size for each agent
+
+# Randomly assign a number of contacts for each agent, capped at one less than their workplace size
 df_X$n_contact           <- sapply(n_worksize,
-                                   function(x) sample(0:(x - 1), 1)) # Randomly assign contact number
+                                   function(x) sample(0:(x - 1), 1))
 ```
 
 
@@ -318,7 +327,7 @@ fun_work_exposure <- function(df_X, M_t) {
   df_atwork              <- df_X[v_agents_atwork,] 
   # Identify infectious agents in the at-work subset
   v_infectious           <- df_atwork$t_infected > t_latent 
-  # Count the number of infectious people at work in the current cycle
+  # Count the number of infectious agents at work in the current cycle
   n_infectious_t         <- sum(v_infectious) 
     
   # Check if there are any infectious workers present
@@ -442,10 +451,16 @@ ABM <- function(df_X, M_init, seed = 1, n_cycles = 10) {
     # Update vector with new daily detection counts.
     v_detected_daily[t] <-  sum(df_X$t_infected == t_detect)
     
-    # Update quarantine status based on previous day's state and current state.
+    # Update quarantine status and health states based on previous cycle's state and current state
     list_quarantine <- fun_Quarantine_Check(df_X, m_M[, t + 1])
-    df_X            <- list_quarantine$df_X  #Update quarantine clock t_iso PP: this is not doing what the comment says
-    m_M[, t+1]      <- list_quarantine$M_t #Update health state by deterministic state transitions
+    
+    # Update df_X with the new quarantine clocks: t_iso
+    # Apply changes made by 'fun_Quarantine_Check' to the population data frame.
+    df_X <- list_quarantine$df_X
+    
+    # Update the vector of health states (m_M[, t+1]) for the next cycle
+    # Ensures deterministic state transitions based on the updated quarantine checks.
+    m_M[, t+1] <- list_quarantine$M_t
 
     # Update the time since infection onset . If one is infected at t + 1 set t_infected = t_infected + 1 
     df_X$t_infected    <- if_else(m_M[, t+1] == "I" | m_M[, t+1] == "IQ", df_X$t_infected + 1, 0)
