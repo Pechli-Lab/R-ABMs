@@ -67,7 +67,7 @@ We ran the model for 100 days and we generate a hypothetical population of 10,00
 
 ```{r}
 ## General setups
-set.seed(1)                                             # set the seed 
+set.seed(1)                                        # set the seed 
 
 n_cycles            <- 100                         # number of cycles
 n_i                 <- 10000                       # number of individuals
@@ -117,7 +117,7 @@ In the section below we will be sampling the individual level characteristics fo
 ```{r}
 # Initialize a population dataframe for an agent-based model
 df_X <- data.frame(
-  pid = 1:n_i                                          # Assign individual IDs
+  pid = 1:n_i       # Assign individual IDs
 )
 # Randomly assign initial states to agents
 M_init <- sample(c(rep("S", n_S), rep("I", n_I)))
