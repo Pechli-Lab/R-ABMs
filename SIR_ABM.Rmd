@@ -36,7 +36,7 @@ p_load_gh("DARTH-git/darthtools")
 
 # 02 Load functions
 
-IN this section we define functions that will be used by the ABM. We try to modularize so that debugging becomes eaiser.
+In this section we define functions that will be used by the ABM. We try to modularize so that debugging becomes eaiser.
 
 
 The function `fun_infect_prob` calculates the infection probability by every cycle, assuming the probability increases by the number of exposures assuming these exposures are independent of eachother
@@ -115,7 +115,7 @@ In the section below we will be sampling the individual level characteristics fo
 ```{r}
 # Initialize a population dataframe for an agent-based model
 df_X <- data.frame(
-  pid = 1:n_i       # Assign individual IDs
+  pid = 1:n_i       # Assign agent IDs
 )
 # Randomly assign initial states to agents
 M_init <- sample(c(rep("S", n_S), rep("I", n_I)))
@@ -213,11 +213,11 @@ Probs <- function(df_X, M_t, n_cycles) {
 
   # Update the transition matrix with probabilities
   
-  m_p_t["S",  M_t == "S" & df_X$iso_status == 0] <- 1 - p_Sus_Inf    # Probability for susceptible individuals to stay in the susceptible state (S) 
+  m_p_t["S",  M_t == "S" & df_X$iso_status == 0]         <- 1 - p_Sus_Inf # Probability for susceptible individuals to stay in the susceptible state (S) 
   
-  m_p_t["I",  M_t == "S" & df_X$iso_status == 0] <-     p_Sus_Inf     # Probability for susceptible individuals to become infected (I)
+  m_p_t["I",  M_t == "S" & df_X$iso_status == 0]         <- p_Sus_Inf     # Probability for susceptible individuals to become infected (I)
   
-  m_p_t["S",  M_t == "S" & df_X$iso_status == 1] <-  1
+  m_p_t["S",  M_t == "S" & df_X$iso_status == 1]         <- 1
   
   # Probabilities are set to 1 for all transitions in saturated states:
   m_p_t["I",  M_t == "I" & df_X$t_infected < t_recover]  <- 1
@@ -288,7 +288,7 @@ fun_Quarantine_Check <- function(df_X, M_t){
   
   # Release individuals from quarantine (reset quarantine clock, update states)
   df_X$t_iso[v_release]        <-  0  # Set the time of isolation to 0
-  df_X$iso_status[v_release]  <-  0  # Reset 
+  df_X$iso_status[v_release]   <-  0  # Reset 
   
   # Reset quarantine clock for individuals who were infected when started in quarantine but their infection was not detected prior to quarantine
   df_X$t_iso[v_new_detected_in_q] <- 1
@@ -348,7 +348,7 @@ fun_work_exposure <- function(df_X, M_t) {
 
     # Initialize contact vector
     v_contact_pid         <- c()
-  # for each infectious worker find all the interactions
+    # for each infectious worker find all the interactions
     for (i in 1:n_infectious_t) {
       
       inf_agent_i        <- df_infectious[i,]
@@ -453,18 +453,16 @@ ABM <- function(df_X, M_init, seed = 1, n_cycles = 10) {
     v_detected_daily[t] <-  sum(df_X$t_infected == t_detect)
     
     # Update quarantine status and health states based on previous cycle's state and current state
-    df_X <- fun_Quarantine_Check(df_X, m_M[, t + 1])
-    
     # Update df_X with the new quarantine clocks: t_iso
     # Apply changes made by 'fun_Quarantine_Check' to the population data frame.
+    df_X <- fun_Quarantine_Check(df_X, m_M[, t + 1])
     
-    print(t)
     # Update the time since infection onset . If one is infected at t + 1 set t_infected = t_infected + 1 
     df_X$t_infected    <- if_else(m_M[, t+1] == "I", df_X$t_infected + 1, 0)
     
     # Update vector with new infections and total infection counts.
     v_new_inf_daily[t]   <- sum(df_X$t_infected == 1) # Number of newly infected agents
-    v_total_inf_daily[t] <- sum(df_X$t_infected > 0) # Number of total infected agents
+    v_total_inf_daily[t] <- sum(df_X$t_infected > 0)  # Number of total infected agents
     
     # Display simulation progress at every 10% completion.
     if(t/(n_cycles/10) == round(t/(n_cycles/10), 0)) {
@@ -540,7 +538,8 @@ p <- ggplot(df, aes(x = day)) +                 # Define the x-axis as the 'day'
   theme_minimal() +
 
   # Position the legend at the bottom of the plot
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5)) 
 
 # Display the generated plot
 p
