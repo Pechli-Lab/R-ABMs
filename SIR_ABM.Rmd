@@ -28,7 +28,10 @@ Change `eval` to `TRUE` if you want to knit this document.
 ```{r}
 if (!require('pacman')) install.packages('pacman'); library(pacman) 
 # load (install if required) packages from CRAN
-p_load("devtools", "dplyr", "scales", "ellipse", "ggplot2", "lazyeval", "igraph", "truncnorm", "ggraph", "reshape2", "knitr", "markdown", "stringr", "dampack", "matrixStats")
+p_load("devtools", "dplyr", "ggplot2","dampack ")
+
+       #"scales", "ellipse", "ggplot2", "lazyeval", "igraph", "truncnorm", "ggraph", "reshape2", "knitr", "markdown", "stringr", "dampack", "matrixStats")
+
 # load (install if required) packages from GitHub
 # install_github("DARTH-git/darthtools", force = TRUE) # Uncomment if there is a newer version
 p_load_gh("DARTH-git/darthtools")
