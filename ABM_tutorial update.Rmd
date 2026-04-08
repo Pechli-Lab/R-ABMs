@@ -195,7 +195,7 @@ create_abmpop <- function(npop){
     ptid   = 1:npop,
     fid    = NA,
     wid    = NA,
-    state              = STATE_S,    
+    state              = NA,    
     qtime              = 0,
     time               = 0,
    work_exposure_count = 0,
