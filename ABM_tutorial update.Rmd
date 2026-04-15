@@ -112,32 +112,32 @@ This section defines all parameters used by the simulation: population size and 
 ```{r}
 ## General setup
 set.seed(1)
-n_cycles          <- 60                            # simulation horizon (daily cycles)
-n_i               <- 1000                          # population size (individuals)
+n_cycles            <- 60                            # simulation horizon (daily cycles)
+n_i                 <- 1000                          # population size (individuals)
 
 ## Time parameters (days)
-q_maxtime         <- 14                            # quarantine duration
+q_maxtime           <- 14                            # quarantine duration
 
 ## Health states (5 total)
-v_names_states    <- c("S",                        # Susceptible
-                       "SQ",                       # Susceptible in quarantine
-                       "I",                        # Infected
-                       "IQ",                       # Infected in quarantine
-                       "R")                        # Recovered
-v_names_cycles    <- paste("cycle", 0:n_cycles)
-n_states          <- length(v_names_states)
+v_names_states      <- c("S",                        # Susceptible
+                         "SQ",                       # Susceptible in quarantine
+                         "I",                        # Infected
+                         "IQ",                       # Infected in quarantine
+                         "R")                        # Recovered
+v_names_cycles      <- paste("cycle", 0:n_cycles)
+n_states            <- length(v_names_states)
 
 ## Integer state constants (faster comparisons than strings)
-STATE_S           <- 0L
-STATE_SQ          <- 1L
-STATE_I           <- 2L
-STATE_IQ          <- 3L
-STATE_R           <- 4L
+STATE_S             <- 0L
+STATE_SQ            <- 1L
+STATE_I             <- 2L
+STATE_IQ            <- 3L
+STATE_R             <- 4L
 
 ## DEFINE CUSTOM FUNCTIONS
 
 ## Custom operator: not-in
-`%!in%`           <- Negate(`%in%`)
+`%!in%`             <- Negate(`%in%`)
 
 ## State groups (integer constants for Probs, Detection, Quarantine_Check)
 terminal_states     <- STATE_R
@@ -147,15 +147,15 @@ iso_states          <- c(STATE_SQ, STATE_IQ)         # isolation states
 sus_states          <- c(STATE_S, STATE_SQ)          # susceptible states
 
 ## Transmission probabilities (per contact)
-p_transhh       <- 0.05                            # probability of transition in household
-p_TransmitWork  <- 0.03                            # probability of transition in workplace
+p_transhh           <- 0.05                          # probability of transition in household
+p_TransmitWork      <- 0.03                          # probability of transition in workplace
 
-p_inf_t0        <- 0.3                             # proportion of the cohort in the infected and not detected state at time 0      
-detect_time_val <- 7                               # day post-infection when detection occurs
+p_inf_t0            <- 0.3                           # proportion of the cohort in the infected and not detected state at time 0      
+detect_time_val     <- 7                             # day post-infection when detection occurs
   
 
-family_size    <- c(1, 2, 3, 4)                    # Family sizes in the population 1, 2, 3, 4)
-  work_size    <- c(5, 7, 8)                       # Workplace sizes in the population 1, 2, 3, 4)
+family_size         <- c(1, 2, 3, 4)                 # Family sizes in the population 1, 2, 3, 4)
+  work_size         <- c(5, 7, 8)                    # Workplace sizes in the population 1, 2, 3, 4)
  
   
   
@@ -218,13 +218,13 @@ create_abmpop <- function(npop){
   # assign family id to each individual based on family size
 
   
-  fam_id  = c(rep(               1 : fam_num * 1  ,each = family_size[1]),
-              rep((fam_num * 1 + 1):(fam_num * 2) ,each = family_size[2]),
-              rep((fam_num * 2 + 1):(fam_num * 3) ,each = family_size[3]),
-              rep((fam_num * 3 + 1):(fam_num * 4) ,each = family_size[4]))
+  fam_id    = c(rep(               1 : fam_num * 1  ,each = family_size[1]),
+                rep((fam_num * 1 + 1):(fam_num * 2) ,each = family_size[2]),
+                rep((fam_num * 2 + 1):(fam_num * 3) ,each = family_size[3]),
+                rep((fam_num * 3 + 1):(fam_num * 4) ,each = family_size[4]))
   # that ensures that we have all npop individuals assigned to a family id 
   
-  fam_id = c(fam_id, rep((max(fam_id) + 1), each = (npop - length(fam_id))))
+  fam_id    = c(fam_id, rep((max(fam_id) + 1), each = (npop - length(fam_id))))
   
   #scramble family ids across individuals  and assign to agents
    agents$fid <- sample (fam_id)
@@ -252,7 +252,6 @@ create_abmpop <- function(npop){
   agents$v_Ts[idx_inf] <- sample(1:(detect_time_val - 1), size = sum(idx_inf), replace = TRUE)
   
   ## Workplace contacts: sample daily contact count (0 to workplace_size - 1)
-  
   # Uses vapply for type-safe vectorized sampling (no dplyr dependency)
   
   # calculate the number of people working in each  work id
