@@ -192,9 +192,9 @@ create_abmpop <- function(npop){
   # Returns: population dataframe with one row per individual
 
   agents <- data.frame(
-    ptid   = 1:npop,
-    fid    = NA,
-    wid    = NA,
+    ptid               = 1:npop,
+    fid                = NA,
+    wid                = NA,
     state              = NA,    
     qtime              = 0,
     time               = 0,
@@ -293,7 +293,7 @@ df_X <- create_abmpop(n_i)
 The `Probs` function updates the transition probabilities of every cycle is shown below.
 
 ```{r}
-
+# The probability of being infected at least once after k contacts 
 infect_prob <- function(prob,exposure) { 
   # Epidemiological formula: 1 - (1-p)^k
   # Each contact is an independent Bernoulli trial with probability p of transmission.
@@ -319,29 +319,31 @@ Probs <- function(M_t, df_X) {
   m_p_t               <- matrix(0, nrow = length(M_t), ncol = n_states)
   colnames(m_p_t)     <- v_names_states
   
-  # compute home and work infection probs for all individuals at once
-  p_home              <- ifelse(df_X$home_exposure_count > 0,
-                              infect_prob(p_transhh, df_X$home_exposure_count),
-                              0)
-  p_work              <- ifelse(df_X$work_exposure_count > 0,
-                              infect_prob(p_TransmitWork, df_X$work_exposure_count),
-                              0)
+  # compute probability of infenction at home and at work for all individuals
+  # PP there is if_else not sure what is faster
+  p_home              <-     infect_prob(p_transhh,      df_X$home_exposure_count)
+  p_work              <-     infect_prob(p_TransmitWork, df_X$work_exposure_count)
+  p_inf               <- 1 - (1 - p_home) * (1 - p_work)
+
+  
+  is_S                <- M_t == STATE_S
+  is_SQ               <- M_t == STATE_SQ
+  is_I                <- M_t == STATE_I
+  is_IQ               <- M_t == STATE_IQ
+  is_R                <- M_t == STATE_R
+  
   
   # S: combined home + work risk via independent Bernoulli: 1 - (1-p_home)*(1-p_work)
-  is_S                <- M_t == STATE_S
-  p_inf               <- 1 - (1 - p_home) * (1 - p_work)
   m_p_t[is_S, "S"]    <- 1 - p_inf[is_S]
   m_p_t[is_S, "I"]    <- p_inf[is_S]
   
   # SQ: home-only risk (quarantined, not at work)
-  is_SQ               <- M_t == STATE_SQ
+
   m_p_t[is_SQ, "SQ"]  <- 1 - p_home[is_SQ]
   m_p_t[is_SQ, "IQ"]  <- p_home[is_SQ]
   
   # I, IQ, R: absorbing states (no further transitions)
-  is_I                <- M_t == STATE_I
-  is_IQ               <- M_t == STATE_IQ
-  is_R                <- M_t == STATE_R
+
   m_p_t[is_I,  "I"]   <- 1
   m_p_t[is_IQ, "IQ"]  <- 1
   m_p_t[is_R,  "R"]   <- 1
