@@ -316,35 +316,35 @@ Probs <- function(M_t, df_X) {
   # n_i x n_states transition probability matrix (rows = individuals, cols = states)
   
   # transition probability matrix, cols named for samplev() compatibility
-  m_p_t           <- matrix(0, nrow = length(M_t), ncol = n_states)
-  colnames(m_p_t) <- v_names_states
+  m_p_t               <- matrix(0, nrow = length(M_t), ncol = n_states)
+  colnames(m_p_t)     <- v_names_states
   
   # compute home and work infection probs for all individuals at once
-  p_home <- ifelse(df_X$home_exposure_count > 0,
-                   infect_prob(p_transhh, df_X$home_exposure_count),
-                   0)
-  p_work <- ifelse(df_X$work_exposure_count > 0,
-                   infect_prob(p_TransmitWork, df_X$work_exposure_count),
-                   0)
+  p_home              <- ifelse(df_X$home_exposure_count > 0,
+                              infect_prob(p_transhh, df_X$home_exposure_count),
+                              0)
+  p_work              <- ifelse(df_X$work_exposure_count > 0,
+                              infect_prob(p_TransmitWork, df_X$work_exposure_count),
+                              0)
   
   # S: combined home + work risk via independent Bernoulli: 1 - (1-p_home)*(1-p_work)
-  is_S  <- M_t == STATE_S
-  p_inf <- 1 - (1 - p_home) * (1 - p_work)
-  m_p_t[is_S, "S"]  <- 1 - p_inf[is_S]
-  m_p_t[is_S, "I"]  <- p_inf[is_S]
+  is_S                <- M_t == STATE_S
+  p_inf               <- 1 - (1 - p_home) * (1 - p_work)
+  m_p_t[is_S, "S"]    <- 1 - p_inf[is_S]
+  m_p_t[is_S, "I"]    <- p_inf[is_S]
   
   # SQ: home-only risk (quarantined, not at work)
-  is_SQ <- M_t == STATE_SQ
-  m_p_t[is_SQ, "SQ"] <- 1 - p_home[is_SQ]
-  m_p_t[is_SQ, "IQ"] <- p_home[is_SQ]
+  is_SQ               <- M_t == STATE_SQ
+  m_p_t[is_SQ, "SQ"]  <- 1 - p_home[is_SQ]
+  m_p_t[is_SQ, "IQ"]  <- p_home[is_SQ]
   
   # I, IQ, R: absorbing states (no further transitions)
-  is_I  <- M_t == STATE_I
-  is_IQ <- M_t == STATE_IQ
-  is_R  <- M_t == STATE_R
-  m_p_t[is_I,  "I"]  <- 1
-  m_p_t[is_IQ, "IQ"] <- 1
-  m_p_t[is_R,  "R"]  <- 1
+  is_I                <- M_t == STATE_I
+  is_IQ               <- M_t == STATE_IQ
+  is_R                <- M_t == STATE_R
+  m_p_t[is_I,  "I"]   <- 1
+  m_p_t[is_IQ, "IQ"]  <- 1
+  m_p_t[is_R,  "R"]   <- 1
   
   return(m_p_t)
 }  
@@ -437,7 +437,7 @@ work_exposure <- function(pop){
   # uses split() lookup + lapply + unlist to avoid growing-vector loop
   
   allpop <- pop
-  select_pop <- pop[pop$atwork & !(pop$state %in% iso_states), ]
+  select_pop <- pop[ !(pop$state %in% iso_states), ]
   
   inf_worker <- select_pop[select_pop$state %in% infect_states, ]
   if (nrow(inf_worker) == 0) return(allpop)
