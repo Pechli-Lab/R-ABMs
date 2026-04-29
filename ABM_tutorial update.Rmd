@@ -319,12 +319,14 @@ Probs <- function(M_t, df_X) {
   m_p_t               <- matrix(0, nrow = length(M_t), ncol = n_states)
   colnames(m_p_t)     <- v_names_states
   
-  # compute probability of infenction at home and at work for all individuals
-  # PP there is if_else not sure what is faster
+  # compute probability of infection at home and at work for all individuals
+  # assume the two probabilities are independent and compute overall infection risk
+  
   p_home              <-     infect_prob(p_transhh,      df_X$home_exposure_count)
   p_work              <-     infect_prob(p_TransmitWork, df_X$work_exposure_count)
   p_inf               <- 1 - (1 - p_home) * (1 - p_work)
 
+  # identify the state individuals are in 
   
   is_S                <- M_t == STATE_S
   is_SQ               <- M_t == STATE_SQ
@@ -332,17 +334,16 @@ Probs <- function(M_t, df_X) {
   is_IQ               <- M_t == STATE_IQ
   is_R                <- M_t == STATE_R
   
-  
-  # S: combined home + work risk via independent Bernoulli: 1 - (1-p_home)*(1-p_work)
+  # Susceptible 
   m_p_t[is_S, "S"]    <- 1 - p_inf[is_S]
-  m_p_t[is_S, "I"]    <- p_inf[is_S]
+  m_p_t[is_S, "I"]    <-     p_inf[is_S]
   
-  # SQ: home-only risk (quarantined, not at work)
+  # Susceptible-in quarantine at home
 
   m_p_t[is_SQ, "SQ"]  <- 1 - p_home[is_SQ]
-  m_p_t[is_SQ, "IQ"]  <- p_home[is_SQ]
+  m_p_t[is_SQ, "IQ"]  <-     p_home[is_SQ]
   
-  # I, IQ, R: absorbing states (no further transitions)
+  # I, IQ, R: absorbing/deterministic states (no further transitions)
 
   m_p_t[is_I,  "I"]   <- 1
   m_p_t[is_IQ, "IQ"]  <- 1
@@ -362,36 +363,38 @@ Probs <- function(M_t, df_X) {
 Quarantine_Check <- function(pop, pre_state){
   # Arguments:
   # pop: population dataframe of current time cycle t
-  # pre_state: states at previously cycle t-1 (integer-coded)
+  # pre_state: Vector of states individuals occupy at cycle t-1 (integer-coded)
   # Returns: 
   # new population dataframe with updated states
   
   # Step1: find people in different quarantine conditions
   
   # People in quarantine:
-  # condition 1: reset quarantine clock for those who become infected or have
-  # close contact with infected people during quarantine.
-  # A new infection within the household means continued exposure risk,
-  # so the quarantine clock must restart from the beginning.
-  new_infected_in_Q          = which(pop$state %in% infect_states_iso & pre_state == STATE_SQ)
+  # condition 1: reset quarantine clock for those who become infected in quarantine or have a household member who becomes infected while they are in quarantine,  A new infection within the household means quarantine clock restarts for all houshold members
   
+  # infected while in quarantine
+  new_infected_in_Q          = which(pop$state == STATE_IQ & pre_state == STATE_SQ)
+  
+  # find the family id of newly infected 
   reset_family               = unique(pop$fid[new_infected_in_Q])
+  
+  # find the members of these families 
   reset_people               = pop$fid %in% reset_family
   
   
-  # condition 2: find people are going to be released from quarantine
+  # condition 2: find people who are going to be released from quarantine
   # check if quarantine clock hit q_maxtime
-  full_q                     = pop$qtime == q_maxtime & !reset_people & !(pop$state %in% terminal_states)
+  full_q                     = pop$qtime == q_maxtime & !reset_people & (pop$state != STATE_R)
   
   # find susceptible people and infected people who meet quarantine time
   sus_full_q                 = full_q & pop$state == STATE_SQ
-  inf_full_q                 = full_q & pop$state %in% infect_states_iso 
+  inf_full_q                 = full_q & pop$state == STATE_IQ 
   
   # condition 3: find people who stay in quarantine and the quarantine clock has to be incremented.
-  else_q                     = (pop$qtime < q_maxtime & pop$qtime > 0) & !reset_people & !(pop$state %in% terminal_states)
+  else_q                     = (pop$qtime < q_maxtime & pop$qtime > 0) & !reset_people & (pop$state != STATE_R)
   
   # Other people:
-  # condition 4: find newly infected people entering quarantine NOTE: people enter quarantine by detection
+  # condition 4: find newly infected people and their household members entering quarantine NOTE: people enter quarantine by detection
   new_infected               = which(pop$state %in% iso_states & pop$qtime == 0)
   
   # condition q_maxtime: find newly infected people's dependencies in families and workplaces
@@ -556,13 +559,13 @@ MicroSim <- function(n_i = 100, df_X, seed = 1, n_cycles = 10, debug = FALSE) {
                   dimnames = list(paste("ind"  , 1:n_i, sep = " "), 
                                   paste("cycle", 0:n_cycles, sep = " ")))   
   
-  m_work_exposure <- matrix(nrow = n_i, ncol = n_cycles, 
+  # m_work exposure tracks how many work exposure occurred?
+    m_work_exposure <- matrix(nrow = n_i, ncol = n_cycles, 
                    dimnames = list(paste("ind"  , 1:n_i, sep = " "), 
                                    paste("cycle", 1:n_cycles, sep = " ")))  
 
-  m_M[, 1]         <- df_X$state          # initial health state at cycle 0 (integer)
-  m_vts[, 1]       <- df_X$v_Ts
-  v_Ts              <- df_X$v_Ts           # days since infection onset
+  m_M[, 1]          <- df_X$state          # initial health state at cycle 0 (integer)
+  m_vts[, 1]        <- df_X$v_Ts
 
   v_total_inf_daily <- rep(0, n_cycles)    # total infections per cycle
   v_new_inf_daily   <- rep(0, n_cycles)    # new infections per day
@@ -577,11 +580,13 @@ MicroSim <- function(n_i = 100, df_X, seed = 1, n_cycles = 10, debug = FALSE) {
     df_X$work_exposure_count <- 0
     df_X$home_exposure_count <- 0
     df_X$contact_type        <- 0
+    
     df_X <- work_exposure(df_X)
     df_X <- home_exposure(df_X)
     m_work_exposure[, t] <- df_X$work_exposure_count
     
-    
+    df_X$v_Ts      <- m_vts[, t]        # days since infection onset (updates every cycle]
+
     # calculate the transition probabilities for the cycle based on health state t
     m_P <- Probs(m_M[, t], df_X)
     
